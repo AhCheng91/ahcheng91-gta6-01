@@ -3,6 +3,26 @@
 import { drawPortrait, portraitForSpeaker } from '../story/characters.js';
 
 const MARKUP = `
+<style>
+#mission-reward { margin: -1px 0 7px; padding-top: 5px; border-top: 1px solid rgba(255,204,121,0.2); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--gold); }
+#mission-reward span { color: var(--coral); }
+.money-respect { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,227,187,0.16); }
+.money-respect-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.money-respect-head .eyebrow { color: var(--teal); }
+#money-panel #rep-rank { color: var(--text); }
+#money-panel #rep-value { font-size: 9px; color: var(--gold); font-variant-numeric: tabular-nums; }
+#money-panel .rep-track { height: 4px; margin-top: 4px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
+#money-panel #rep-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--gold)); transition: width 0.35s ease; }
+.weapon-slot span.weapon-name { display: block; margin-top: 1px; font-size: 6.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.weapon-slot small.weapon-ammo { display: block; margin: 2px 1px 0; padding: 1px 0; background: rgba(255,122,92,0.14); border: 1px solid rgba(255,122,92,0.26); border-radius: 2px; color: var(--text); font-size: 8px; line-height: 1.15; }
+.weapon-slot.active small.weapon-ammo { background: rgba(255,122,92,0.3); border-color: var(--coral); color: #fff3dc; }
+.weapon-slot.locked small.weapon-ammo { color: var(--muted); border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); }
+#radio-panel { left: 50%; right: auto; bottom: 126px; transform: translateX(-50%); width: min(360px, 44vw); justify-content: center; padding: 6px 13px; border: 1px solid rgba(255,204,121,0.32); border-radius: 999px; background: linear-gradient(90deg, rgba(8,21,29,0.9), rgba(12,32,39,0.9), rgba(8,21,29,0.9)); box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+#radio-panel .radio-key { margin-left: 8px; }
+#radio-station { color: var(--gold); }
+#radio-track { color: var(--teal); }
+#prompt { bottom: 160px; }
+</style>
 <div id="hud" aria-hidden="true">
   <div class="hud-top-center">
     <div id="clock" class="clock"><b id="clock-time">17:20</b><span id="clock-phase">GOLDEN HOUR</span></div>
@@ -18,6 +38,7 @@ const MARKUP = `
       <div class="mission-head"><span id="mission-job">FREE ROAM</span><span id="mission-stage">STAGE 1 / 3</span></div>
       <div id="mission-pips" class="mission-pips"></div>
       <div id="mission-objective" class="mission-objective">Explore Puerto Marea</div>
+      <div id="mission-reward">$1,200 <span>·</span> +80 RESPECT</div>
       <div id="mission-next" class="eyebrow">NEXT · FIND A CAR ON THE MALECÓN</div>
       <div id="mission-timer" class="mission-timer hidden">TIME 00:00</div>
     </section>
@@ -31,10 +52,10 @@ const MARKUP = `
     <section id="money-panel" class="panel stat-panel">
       <span class="eyebrow">CASH · KESANG CREW</span><span id="money" class="stat-value">$ 2,450</span>
       <span id="crab-counter" class="crab-counter">◆ GOLDEN CRABS 0 / 12</span>
-    </section>
-    <section id="rep-panel" class="panel stat-panel">
-      <span class="eyebrow">REPUTATION · <span id="rep-rank">DOCK HAND</span></span>
-      <div class="rep-line"><div class="rep-track"><div id="rep-fill"></div></div><span id="rep-value">120</span></div>
+      <div class="money-respect">
+        <div class="money-respect-head"><span class="eyebrow">RESPECT · <span id="rep-rank">DOCK HAND</span></span><span id="rep-value">120</span></div>
+        <div class="rep-track"><div id="rep-fill"></div></div>
+      </div>
     </section>
     <section id="wanted-panel" class="panel">
       <div class="dispatch-head"><span class="eyebrow">PMPD WANTED</span><span id="wanted-count">CLEAN</span></div>
@@ -56,16 +77,16 @@ const MARKUP = `
   </section>
 
   <section id="weapon-wheel" aria-label="Weapon wheel">
-    <div class="weapon-slot active"><b>1</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>FISTS</span><small>—</small></div>
-    <div class="weapon-slot"><b>2</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>PISTOL</span><small>12</small></div>
-    <div class="weapon-slot"><b>3</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>SMG</span><small>—</small></div>
-    <div class="weapon-slot"><b>4</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>SHOTGUN</span><small>—</small></div>
-    <div class="weapon-slot"><b>5</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>RIFLE</span><small>—</small></div>
-    <div class="weapon-slot"><b>6</b><canvas class="weapon-icon" width="22" height="22"></canvas><span>GRENADE</span><small>—</small></div>
+    <div class="weapon-slot active"><b>1</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">FISTS</span><small class="weapon-ammo">—</small></div>
+    <div class="weapon-slot"><b>2</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">PISTOL</span><small class="weapon-ammo">12</small></div>
+    <div class="weapon-slot"><b>3</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">SMG</span><small class="weapon-ammo">—</small></div>
+    <div class="weapon-slot"><b>4</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">SHOTGUN</span><small class="weapon-ammo">—</small></div>
+    <div class="weapon-slot"><b>5</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">RIFLE</span><small class="weapon-ammo">—</small></div>
+    <div class="weapon-slot"><b>6</b><canvas class="weapon-icon" width="22" height="22"></canvas><span class="weapon-name">GRENADE</span><small class="weapon-ammo">—</small></div>
     <div class="wheel-hub"><span>WEAPONS</span><b>RAFA</b></div>
   </section>
 
-  <div id="radio-panel"><span class="radio-bars"><i></i><i></i><i></i></span><span id="radio-station">RADIO MAREA 92.7</span><span class="radio-divider">/</span><span id="radio-track">SON CARIBE</span><span class="radio-key">B · NEXT</span></div>
+  <div id="radio-panel"><span class="radio-bars"><i></i><i></i><i></i></span><span id="radio-station">LAGOON FM 98.1</span><span class="radio-divider">·</span><span id="radio-track">SYNTHWAVE</span><span class="radio-key">B · NEXT</span></div>
 
   <section id="vehicle-panel" class="panel">
     <div class="vehicle-head"><span id="vehicle-name">ON FOOT</span><span id="vehicle-class">NO VEHICLE</span></div>
@@ -161,6 +182,7 @@ export class Hud {
       missionStage: byId('mission-stage'),
       missionPips: byId('mission-pips'),
       missionObjective: byId('mission-objective'),
+      missionReward: byId('mission-reward'),
       missionNext: byId('mission-next'),
       missionTimer: byId('mission-timer'),
       money: byId('money'),
@@ -227,7 +249,7 @@ export class Hud {
     this.failTimer = null;
     this.completeTimer = null;
     this.rankUntil = 0;
-    this.repPanel = byId('rep-panel');
+    this.repPanel = byId('money-panel');
     this.elements.screenRetry?.addEventListener('click', () => this.onRetry?.());
     this.elements.missionOverlayRetry?.addEventListener('click', () => this.onRetry?.());
   }
@@ -241,6 +263,7 @@ export class Hud {
     setText(this.elements.missionJob, mission.job ?? 'FREE ROAM');
     setText(this.elements.missionStage, mission.stage ?? '—');
     setText(this.elements.missionObjective, mission.objective ?? '');
+    setText(this.elements.missionReward, mission.reward ?? '$1,200 · +80 RESPECT');
     setText(this.elements.missionNext, mission.nextHint ? `NEXT · ${mission.nextHint}` : '');
     const timer = String(mission.timer ?? '');
     this.elements.missionTimer.classList.toggle('hidden', !timer);
