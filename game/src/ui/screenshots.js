@@ -5,26 +5,81 @@ import { BLOCKS, MARKERS, ROADS, isBuildingFootprint } from '../world/cityLayout
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-const defaultFollowCamera = new WeakMap();
-
-function restoreFollowCamera(game) {
-  const original = defaultFollowCamera.get(game.engine);
-  if (original) game.engine.followCamera = original;
-}
-
-function pinCamera(game, desired, lookAt) {
-  if (!defaultFollowCamera.has(game.engine)) defaultFollowCamera.set(game.engine, game.engine.followCamera.bind(game.engine));
-  game.engine.followCamera = function pinnedFollowCamera() {
-    this.camera.position.copy(desired);
-    this.camera.lookAt(lookAt);
-    this.camera.updateProjectionMatrix();
-    this.sun.target.position.set(game.player.position.x, 0, game.player.position.z);
-    this.sun.target.updateMatrixWorld();
-    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirection, 220);
-  };
+function pinCamera(game, desired, lookAt, fov = game.engine.camera.fov) {
+  game.shotCamera = { position: desired.clone(), lookAt: lookAt.clone(), fov };
   game.engine.camera.position.copy(desired);
   game.engine.camera.lookAt(lookAt);
+  game.engine.camera.fov = fov;
   game.engine.camera.updateProjectionMatrix();
+  game.engine.camera.updateMatrixWorld(true);
+  game.engine.sun.target.position.set(game.player.position.x, 0, game.player.position.z);
+  game.engine.sun.target.updateMatrixWorld();
+  game.engine.sun.position.copy(game.engine.sun.target.position).addScaledVector(game.engine.sunDirection, 220);
+}
+
+let spotPoolTexture = null;
+
+function radialSpotTexture() {
+  if (spotPoolTexture) return spotPoolTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.45, 'rgba(255, 255, 255, 0.55)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 128, 128);
+  spotPoolTexture = new THREE.CanvasTexture(canvas);
+  spotPoolTexture.colorSpace = THREE.SRGBColorSpace;
+  return spotPoolTexture;
+}
+
+function ensureGroundSpotlightPool(game, target) {
+  const existing = game.engine.scene.getObjectByName('heli-spotlight-pool');
+  if (existing) {
+    existing.position.set(target.x, 0.03, target.z);
+    return existing;
+  }
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(4.5, 48),
+    new THREE.MeshBasicMaterial({
+      map: radialSpotTexture(),
+      color: '#dfe9ff',
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    }),
+  );
+  pool.name = 'heli-spotlight-pool';
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(target.x, 0.03, target.z);
+  game.engine.scene.add(pool);
+  return pool;
+}
+
+function verifyShotCamera(game, intended, points, label) {
+  const camera = game.engine.camera;
+  const actual = camera.position.clone();
+  const error = actual.distanceTo(intended);
+  const span = projectedSpan(camera, points);
+  console.info(`[shot:${label}:camera]`, JSON.stringify({
+    intended: intended.toArray().map((v) => Number(v.toFixed(3))),
+    actual: actual.toArray().map((v) => Number(v.toFixed(3))),
+    errorMetres: Number(error.toFixed(3)),
+    heroBounds: span ? {
+      minX: Number(span.minX.toFixed(3)),
+      maxX: Number(span.maxX.toFixed(3)),
+      minY: Number(span.minY.toFixed(3)),
+      maxY: Number(span.maxY.toFixed(3)),
+    } : null,
+  }));
+  console.assert(error <= 0.05, `${label} camera must be within 0.05m of the pinned position`);
+  console.assert(span && span.minX >= -1 && span.maxX <= 1 && span.minY >= -1 && span.maxY <= 1, `${label} hero car must sit fully inside the frame`);
+  console.assert(span && span.minY > -0.75, `${label} hero car bottom edge must stay above -0.75 NDC`);
 }
 
 // Screen-space helpers: every key-art frame is checked before the capture runs.
@@ -246,14 +301,15 @@ function lockCamera(game, blended, shotSpeed = null, cameraOpts = null) {
   game.player.cameraBlend = blended ? 1 : 0;
   game.player.cameraBlendTarget = blended ? 1 : 0;
   game.shotSpeed = shotSpeed;
-  game.shotCamera = cameraOpts;
+  game.shotCamera = cameraOpts?.position && cameraOpts?.lookAt
+    ? { position: cameraOpts.position.clone(), lookAt: cameraOpts.lookAt.clone(), fov: cameraOpts.fov ?? game.engine.camera.fov }
+    : null;
   game.engine.snapCamera(game.player, cameraOpts ?? {});
 }
 
 async function stageChase(game) {
   game.timeOfDay = 17.6;
   game.engine.setTimeOfDay(game.timeOfDay);
-  restoreFollowCamera(game);
 
   const hero = game.heroVehicle;
   const heading = Math.PI / 2;
@@ -317,10 +373,10 @@ async function stageChase(game) {
     const vehicle = unit.vehicle;
     if (!vehicle) return;
     if (index < 2) {
-      const behind = 7.2 + index * 1.1;
-      const leftOffset = 3.1 + index * 0.5;
+      const behind = 2 + index * 0.8;
+      const leftOffset = 3.5 + index * 1;
       vehicle.position.copy(heroPos).addScaledVector(forward, -behind).addScaledVector(left, leftOffset);
-      vehicle.heading = heading;
+      vehicle.heading = Math.atan2(heroPos.x - vehicle.position.x, heroPos.z - vehicle.position.z);
       vehicle.speed = 0;
       vehicle.maxSpeed = 0;
       vehicle.parked = false;
@@ -349,23 +405,17 @@ async function stageChase(game) {
       heli.spotlight.target.position.copy(heroPos).addScaledVector(forward, 25).setY(0.5);
       heli.spotlight.intensity = 42;
     }
-    if (heli.spotlightCone) {
-      heli.spotlightCone.position.copy(heli.mesh.position);
-      heli.spotlightCone.lookAt(heroPos.x + forward.x * 25, 0, heroPos.z + forward.z * 25);
-      heli.spotlightCone.rotateX(-Math.PI / 2);
-      heli.spotlightCone.material.opacity = 0.13;
-    }
+    if (heli.spotlightCone) heli.spotlightCone.visible = false;
+    ensureGroundSpotlightPool(game, heroPos.clone().addScaledVector(forward, 25).setY(0.03));
   }
 
-  const cameraPos = heroPos.clone().addScaledVector(forward, -6.5).addScaledVector(left, 1.4).setY(1.55);
-  const lookAt = heroPos.clone().setY(heroRoof + 2);
+  const cameraPos = heroPos.clone().addScaledVector(forward, -10).addScaledVector(left, 1.4).setY(1.55);
+  const lookAt = heroPos.clone().setY(heroRoof + 2.67);
   game.shotSpeed = 0;
   game.shotCamera = null;
   lockCamera(game, true, 0, {});
-  pinCamera(game, cameraPos, lookAt);
-  game.engine.camera.fov = 80;
-  game.engine.camera.updateProjectionMatrix();
-  game.engine.camera.updateMatrixWorld(true);
+  pinCamera(game, cameraPos, lookAt, 80);
+  verifyShotCamera(game, cameraPos, hero ? vehicleCorners(hero) : [], 'chase');
 
   const carSpan = projectedSpan(game.engine.camera, hero ? vehicleCorners(hero) : []);
   const nearby = countNearbyObjects(game, cameraPos, 6);
@@ -387,7 +437,6 @@ async function stageChase(game) {
 async function stageShootout(game) {
   game.timeOfDay = 22.1;
   game.engine.setTimeOfDay(game.timeOfDay);
-  restoreFollowCamera(game);
 
   const playerPos = new THREE.Vector3(-190, 0, 52);
   const facing = -Math.PI / 2;
@@ -485,7 +534,6 @@ async function stageShootout(game) {
 async function stageDrive(game) {
   game.timeOfDay = 16.5;
   game.engine.setTimeOfDay(game.timeOfDay);
-  restoreFollowCamera(game);
 
   const hero = game.heroVehicle;
   const heading = Math.PI / 2;
@@ -562,7 +610,8 @@ async function stageDrive(game) {
   game.shotSpeed = 0;
   game.shotCamera = null;
   lockCamera(game, true, 0, {});
-  pinCamera(game, cameraPos, lookAt);
+  pinCamera(game, cameraPos, lookAt, 66);
+  verifyShotCamera(game, cameraPos, hero ? vehicleCorners(hero) : [], 'drive');
   game.engine.camera.updateMatrixWorld(true);
 
   const crosswalksInFrame = visibleCrosswalks(game.engine.camera, hero ?? { position: heroPos, heading, spec: { length: 4.5, width: 2, cabin: 0.6 } });
@@ -581,7 +630,6 @@ async function stageDrive(game) {
 async function stageMenu(game) {
   game.timeOfDay = 17.5;
   game.engine.setTimeOfDay(game.timeOfDay);
-  restoreFollowCamera(game);
   game.wanted.setStars(0, game.player.position);
   game.police.clear();
   game.hud.setMission({ job: 'JOB 03 · DOCK HEIST', stage: 'STAGE 2 / 3', stageIndex: 2, stageCount: 3, objective: 'Steal the manifest van at Puerto Nuevo', nextHint: 'LOSE THE TWO-STAR RESPONSE' });

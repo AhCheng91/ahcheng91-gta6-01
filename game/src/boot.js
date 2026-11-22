@@ -376,7 +376,14 @@ export class MareaRojaGame {
     this.updatePrompt();
     this.showCurrentDistrict();
     this.city.update(dt);
-    this.engine.followCamera(this.player, { dt, ...(this.shotCamera ?? {}) });
+    if (this.shotCamera?.position && this.shotCamera?.lookAt) {
+      this.engine.camera.position.copy(this.shotCamera.position);
+      this.engine.camera.lookAt(this.shotCamera.lookAt);
+      if (typeof this.shotCamera.fov === 'number') this.engine.camera.fov = this.shotCamera.fov;
+      this.engine.camera.updateProjectionMatrix();
+    } else {
+      this.engine.followCamera(this.player, { dt });
+    }
     this.hud.tick(dt);
     this.minimap.draw({
       player: this.player,
