@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { ROADS, BLOCKS, isCarriageway } from './cityLayout.js';
+import { isBoulevard, laneDividerOffsets } from './roadNetwork.js';
 
 function createRandom(seed) {
   let value = seed >>> 0;
@@ -286,6 +287,8 @@ export class CityBuilder {
       surface.receiveShadow = true;
       this.root.add(surface);
 
+      const boulevard = isBoulevard(road);
+      const dividerOffsets = laneDividerOffsets(road);
       for (const [start, end] of roadSegments(road)) {
         const segmentLength = end - start;
         const segmentCenter = (start + end) / 2;
@@ -293,26 +296,30 @@ export class CityBuilder {
           const offset = side * (road.width / 2 + 1.7);
           if (alongX) {
             sidewalks.push(box(segmentCenter, 0.16, road.at + offset, segmentLength, 0.32, 3.2, side < 0 ? '#d9c8a6' : '#cfc0a2'));
-            kerbs.push(box(segmentCenter, 0.34, road.at + side * (road.width / 2 + 0.12), segmentLength, 0.2, 0.25, '#f1dfbb'));
-            paving.push(box(segmentCenter, 0.327, road.at + offset + side * 1.15, segmentLength, 0.014, 0.11, '#bdae90'));
+            kerbs.push(box(segmentCenter, 0.3, road.at + side * (road.width / 2 + 0.1), segmentLength, 0.28, 0.15, '#8c8982'));
+            paving.push(box(segmentCenter, 0.327, road.at + offset + side * 0.78, segmentLength, 0.02, 0.55, '#c3b394'));
+            paving.push(box(segmentCenter, 0.327, road.at + offset - side * 0.78, segmentLength, 0.02, 0.55, '#b7a887'));
           } else {
             sidewalks.push(box(road.at + offset, 0.16, segmentCenter, 3.2, 0.32, segmentLength, '#d6c5a4'));
-            kerbs.push(box(road.at + side * (road.width / 2 + 0.12), 0.34, segmentCenter, 0.25, 0.2, segmentLength, '#f1dfbb'));
-            paving.push(box(road.at + offset + side * 1.15, 0.327, segmentCenter, 0.11, 0.014, segmentLength, '#bdae90'));
+            kerbs.push(box(road.at + side * (road.width / 2 + 0.1), 0.3, segmentCenter, 0.15, 0.28, segmentLength, '#8c8982'));
+            paving.push(box(road.at + offset + side * 0.78, 0.327, segmentCenter, 0.55, 0.02, segmentLength, '#c3b394'));
+            paving.push(box(road.at + offset - side * 0.78, 0.327, segmentCenter, 0.55, 0.02, segmentLength, '#b7a887'));
           }
         }
-        for (let distance = start + 2; distance < end - 2; distance += 9) {
-          if (alongX) markings.push(box(distance, 0.055, road.at, 3.6, 0.03, 0.22, '#efdfb9'));
-          else markings.push(box(road.at, 0.055, distance, 0.22, 0.03, 3.6, '#efdfb9'));
+
+        // One row of 0.15 m wide, 3 m dashes with 6 m gaps per lane divider.
+        for (const divider of dividerOffsets) {
+          for (let distance = start + 2; distance < end - 2; distance += 9) {
+            if (alongX) markings.push(box(distance, 0.055, road.at + divider, 3, 0.03, 0.15, '#efe6d0'));
+            else markings.push(box(road.at + divider, 0.055, distance, 0.15, 0.03, 3, '#efe6d0'));
+          }
         }
-        if (road.width >= 16) {
+        if (boulevard) {
           for (const side of [-1, 1]) {
-            if (alongX) markings.push(box(segmentCenter, 0.056, road.at + side * 0.46, segmentLength, 0.03, 0.16, '#f3e4c2'));
-            else markings.push(box(road.at + side * 0.46, 0.056, segmentCenter, 0.16, 0.03, segmentLength, '#f3e4c2'));
+            if (alongX) markings.push(box(segmentCenter, 0.056, road.at + side * 0.1, segmentLength, 0.03, 0.12, '#f3e4c2'));
+            else markings.push(box(road.at + side * 0.1, 0.056, segmentCenter, 0.12, 0.03, segmentLength, '#f3e4c2'));
           }
         }
-        if (alongX) markings.push(box(start + 0.6, 0.056, road.at, 0.3, 0.03, road.width - 1.6, '#ead8ae'));
-        else markings.push(box(road.at, 0.056, start + 0.6, road.width - 1.6, 0.03, 0.3, '#ead8ae'));
         for (let distance = start + 15; distance < end - 5; distance += 46) {
           const edge = road.width / 2 - 0.7;
           if (alongX) {
@@ -325,14 +332,19 @@ export class CityBuilder {
         }
       }
 
+      // Stop bars and 0.6 m crosswalk stripes exist only at intersections.
       for (const other of ROADS) {
         if (other.axis === road.axis || other.at < road.from || other.at > road.to) continue;
         const crossingCenter = other.at;
         for (const approach of [-1, 1]) {
-          const along = crossingCenter + approach * (other.width / 2 + 2.6);
-          for (let stripe = -2; stripe <= 2; stripe += 1) {
-            if (alongX) markings.push(box(along + stripe * 1.15, 0.058, road.at, 0.55, 0.03, road.width - 2.2, '#f3e4c2'));
-            else markings.push(box(road.at, 0.058, along + stripe * 1.15, road.width - 2.2, 0.03, 0.55, '#f3e4c2'));
+          const stopAt = crossingCenter + approach * (other.width / 2 + 1.15);
+          if (alongX) markings.push(box(stopAt, 0.057, road.at, 0.3, 0.03, road.width - 2.4, '#ead8ae'));
+          else markings.push(box(road.at, 0.057, stopAt, road.width - 2.4, 0.03, 0.3, '#ead8ae'));
+          const crosswalkCenter = crossingCenter + approach * (other.width / 2 + 3.4);
+          for (let stripe = -1; stripe <= 2; stripe += 1) {
+            const point = crosswalkCenter + (stripe - 0.5) * 1.5;
+            if (alongX) markings.push(box(point, 0.058, road.at, 0.6, 0.03, road.width - 2.6, '#f3e4c2'));
+            else markings.push(box(road.at, 0.058, point, road.width - 2.6, 0.03, 0.6, '#f3e4c2'));
           }
         }
       }
@@ -340,8 +352,8 @@ export class CityBuilder {
 
     this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85 }), markings, false, 'Road markings'));
     this.root.add(makeInstances(unitBox, asphalt, sidewalks, true, 'Sidewalk slabs'));
-    this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.8 }), kerbs, false, 'Raised kerbs'));
-    this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 }), paving, false, 'Paving bands'));
+    this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.8 }), kerbs, false, 'Granite kerbs'));
+    this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 }), paving, false, 'Sidewalk paving bands'));
     this.root.add(makeInstances(unitBox, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 }), drains, false, 'Storm drains'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.7, metalness: 0.3 }), manholes, false, 'Manhole covers'));
   }

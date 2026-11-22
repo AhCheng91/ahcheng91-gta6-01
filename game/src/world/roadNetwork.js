@@ -3,6 +3,15 @@
 import { ROADS } from './cityLayout.js';
 
 export const LANE_OFFSET = 2.6;
+export const LANE_WIDTH = 3.6;
+
+export function isBoulevard(road) {
+  return road.width >= 16;
+}
+
+export function laneDividerOffsets(road) {
+  return isBoulevard(road) ? [-LANE_WIDTH, LANE_WIDTH] : [0];
+}
 
 const nodes = new Map();
 const adjacency = new Map();
