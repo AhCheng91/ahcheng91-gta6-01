@@ -357,6 +357,9 @@ export class CityBuilder {
         if (style === 'corona' && height > 42) {
           setbacks.push(box(x, height + 5.2, z, width * 0.58, 3.4, depth * 0.58, palette.colour));
         }
+        if (style === 'corona' && height > 58) {
+          setbacks.push(box(x, height + 8.7, z, width * 0.4, 3.4, depth * 0.4, palette.colour));
+        }
       }
       cornices.push(box(x, height - 0.35, z, width + 0.9, 0.75, depth + 0.9, '#f6e7c9'));
       if (height > 22) cornices.push(box(x, height * 0.54, z, width + 0.45, 0.45, depth + 0.45, '#ead9b9'));
@@ -371,7 +374,8 @@ export class CityBuilder {
         for (let row = 0; row < rows; row += 1) {
           const y = 3.4 + row * 3.4;
           if (y > height - 1.4) continue;
-          if (style === 'corona' && row % 4 === 2) {
+          const hasBalconies = style === 'corona' || (style !== 'puerto' && (block.id.charCodeAt(1) || 0) % 3 === 0);
+          if (hasBalconies && row % 4 === 2) {
             for (const bandSide of [-1, 1]) {
               const bandX = alongZ ? x : face + bandSide * 0.12;
               const bandZ = alongZ ? face + facingOut * 0.12 : z;
@@ -386,13 +390,17 @@ export class CityBuilder {
             const color = lit ? (random() < 0.5 ? '#ffd7a1' : '#ffecbd') : (random() < 0.3 ? '#2c4c5e' : '#345a6b');
             if (alongZ) {
               windows.push(box(x + along, y, face + facingOut * 0.14, 1.65, 1.7, 0.12, color));
-              frames.push(box(x + along, y, face + facingOut * 0.2, 1.85, 0.12, 0.16, '#eadfc6'));
               frames.push(box(x + along, y + 0.88, face + facingOut * 0.2, 1.85, 0.12, 0.16, '#eadfc6'));
+              frames.push(box(x + along, y - 0.88, face + facingOut * 0.2, 1.85, 0.12, 0.16, '#eadfc6'));
+              frames.push(box(x + along - 0.84, y, face + facingOut * 0.2, 0.11, 1.8, 0.16, '#eadfc6'));
+              frames.push(box(x + along + 0.84, y, face + facingOut * 0.2, 0.11, 1.8, 0.16, '#eadfc6'));
               sills.push(box(x + along, y - 1.0, face + facingOut * 0.24, 1.9, 0.14, 0.3, '#f2e4c6'));
             } else {
               windows.push(box(face + facingOut * 0.14, y, z + along, 0.12, 1.7, 1.65, color));
-              frames.push(box(face + facingOut * 0.2, y, z + along, 0.16, 0.12, 1.85, '#eadfc6'));
               frames.push(box(face + facingOut * 0.2, y + 0.88, z + along, 0.16, 0.12, 1.85, '#eadfc6'));
+              frames.push(box(face + facingOut * 0.2, y - 0.88, z + along, 0.16, 0.12, 1.85, '#eadfc6'));
+              frames.push(box(face + facingOut * 0.2, y, z + along - 0.84, 0.16, 1.8, 0.11, '#eadfc6'));
+              frames.push(box(face + facingOut * 0.2, y, z + along + 0.84, 0.16, 1.8, 0.11, '#eadfc6'));
               sills.push(box(face + facingOut * 0.24, y - 1.0, z + along, 0.3, 0.14, 1.9, '#f2e4c6'));
             }
           }
