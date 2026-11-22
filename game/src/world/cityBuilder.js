@@ -307,8 +307,8 @@ export class CityBuilder {
         for (const approach of [-1, 1]) {
           const along = crossingCenter + approach * (other.width / 2 + 2.6);
           for (let stripe = -2; stripe <= 2; stripe += 1) {
-            if (alongX) markings.push(box(along + stripe * 1.15, 0.058, road.at, 0.55, 0.03, road.width - 2.2, '#f3e4c2'));
-            else markings.push(box(road.at, 0.058, along + stripe * 1.15, road.width - 2.2, 0.03, 0.55, '#f3e4c2'));
+            if (alongX) markings.push(box(along + stripe * 1.15, 0.058, road.at, 0.55, 0.03, 2.8, '#f3e4c2'));
+            else markings.push(box(road.at, 0.058, along + stripe * 1.15, 2.8, 0.03, 0.55, '#f3e4c2'));
           }
         }
       }
