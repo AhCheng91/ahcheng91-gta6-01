@@ -1,8 +1,31 @@
 // Screenshot presets: stage cinematic scenes for capture, reachable by ?shot=name.
 
-import { MARKERS } from '../world/cityLayout.js';
+import * as THREE from 'three';
+import { MARKERS, isBuildingFootprint } from '../world/cityLayout.js';
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+const defaultFollowCamera = new WeakMap();
+
+function restoreFollowCamera(game) {
+  const original = defaultFollowCamera.get(game.engine);
+  if (original) game.engine.followCamera = original;
+}
+
+function pinCamera(game, desired, lookAt) {
+  if (!defaultFollowCamera.has(game.engine)) defaultFollowCamera.set(game.engine, game.engine.followCamera.bind(game.engine));
+  game.engine.followCamera = function pinnedFollowCamera() {
+    this.camera.position.copy(desired);
+    this.camera.lookAt(lookAt);
+    this.camera.updateProjectionMatrix();
+    this.sun.target.position.set(game.player.position.x, 0, game.player.position.z);
+    this.sun.target.updateMatrixWorld();
+    this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirection, 220);
+  };
+  game.engine.camera.position.copy(desired);
+  game.engine.camera.lookAt(lookAt);
+  game.engine.camera.updateProjectionMatrix();
+}
 
 export async function applyScreenshotPreset(game, name) {
   if (!name) return false;
@@ -70,53 +93,64 @@ async function stageChase(game) {
 async function stageShootout(game) {
   game.timeOfDay = 22.3;
   game.engine.setTimeOfDay(game.timeOfDay);
+  restoreFollowCamera(game);
+
+  const playerPos = new THREE.Vector3(-190, 0, 52);
+  const facing = -Math.PI / 2;
   game.player.aimingOverride = true;
-  const cameraOpts = { distance: 2.4, height: 1.8, lookAhead: 16 };
-  game.player.position.set(-190, 0, 52);
-  game.player.mesh.position.copy(game.player.position);
-  game.player.viewYaw = -Math.PI / 2;
-  game.player.facing = game.player.viewYaw;
-  game.player.mesh.rotation.y = game.player.facing;
+  game.player.position.copy(playerPos);
+  game.player.mesh.position.copy(playerPos);
+  game.player.viewYaw = facing;
+  game.player.facing = facing;
+  game.player.mesh.rotation.y = facing;
   game.player.aiming = true;
   game.player.giveWeapon('pistol');
   game.player.activeWeapon = 'pistol';
   game.hud.setWeapons(game.player.weapons, 'pistol');
-  game.wanted.setStars(2, game.player.position);
-  game.police.dispatch(2, game.player.position);
+  game.wanted.setStars(2, playerPos);
+  game.police.dispatch(2, playerPos);
   game.hud.setMission({ job: 'JOB 05 · THE INFORMANT', stage: 'STAGE 2 / 3', stageIndex: 2, stageCount: 3, objective: 'Hold off the Cangrejo gunmen', nextHint: 'GET KIKI TO THE VAN' });
   game.hud.say('KIKI SOL', 'They are coming through the stalls!');
   game.hud.setRadio('PMPD SCANNER', 'SHOOTS FIRED · CALLE SAL');
   game.hud.setAiming(true, false);
   await settle(game, 45);
 
-  const cruisers = game.police.units.filter((unit) => unit.kind === 'CRUISER').slice(0, 2);
+  const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+  const cameraPos = playerPos.clone().addScaledVector(forward, -3.4).addScaledVector(right, 0.9);
+  cameraPos.y = 1.85;
+  const lookAt = playerPos.clone().addScaledVector(forward, 8).setY(1.45);
+
+  const cameraDistance = cameraPos.distanceTo(playerPos);
+  const buildingNearby = isBuildingFootprint(cameraPos.x, cameraPos.z, 2);
+  console.info('[shot:shootout]', { cameraDistance, buildingNearby, cameraPos: cameraPos.toArray(), playerPos: playerPos.toArray() });
+  console.assert(cameraDistance >= 3, 'shootout camera must be >= 3m from player');
+  console.assert(!buildingNearby, 'shootout camera must be >= 2m from building colliders');
+
+  const cruisers = game.police.units.filter((unit) => unit.kind === 'CRUISER' && unit.vehicle).slice(0, 2);
   const cruiserSpots = [
-    { x: -203, z: 55.5, heading: Math.PI / 2 },
-    { x: -209, z: 48.5, heading: Math.PI / 2 },
+    { x: playerPos.x - 10, z: 55.5, heading: Math.PI / 2 },
+    { x: playerPos.x - 14, z: 48.5, heading: Math.PI / 2 },
   ];
   cruisers.forEach((unit, index) => {
     const vehicle = unit.vehicle;
     const spot = cruiserSpots[index];
+    if (!spot) return;
     vehicle.position.set(spot.x, 0, spot.z);
     vehicle.heading = spot.heading;
     vehicle.speed = 0;
     vehicle.maxSpeed = 0;
     vehicle.mesh.position.copy(vehicle.position);
     vehicle.mesh.rotation.y = vehicle.heading;
-    vehicle.setSiren(true);
+    if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
     unit.position = vehicle.position;
     unit.tactic = 'HOLD';
   });
 
   game.pedestrians.peds.slice(0, 4).forEach((ped, index) => {
-    ped.position.set(-198 - index * 4, 0, 52 + (index % 2 ? 3.2 : -3.2));
-    const dx = ped.position.x - game.player.position.x;
-    const dz = ped.position.z - game.player.position.z;
-    const length = Math.hypot(dx, dz) || 1;
-    ped.panicDirection = { x: dx / length + (index - 1.5) * 0.14, z: dz / length };
-    const normal = Math.hypot(ped.panicDirection.x, ped.panicDirection.z) || 1;
-    ped.panicDirection.x /= normal;
-    ped.panicDirection.z /= normal;
+    const laneZ = 52 + (index % 2 ? 2.8 : -2.8);
+    ped.position.set(playerPos.x - 6 - index * 3.5, 0, laneZ);
+    ped.panicDirection = { x: right.x, z: right.z };
     ped.mode = 'panic';
     ped.timer = 9;
     ped.target = null;
@@ -127,7 +161,10 @@ async function stageShootout(game) {
 
   game.player.aiming = true;
   game.player.showMuzzleFlash(3);
-  lockCamera(game, false, null, cameraOpts);
+  game.shotSpeed = null;
+  game.shotCamera = null;
+  lockCamera(game, false, null, {});
+  pinCamera(game, cameraPos, lookAt);
   return true;
 }
 
