@@ -221,9 +221,9 @@ export class Engine {
     const blend = Math.max(0, Math.min(1, target.cameraBlend ?? (target.inVehicle ? 1 : 0)));
     const yaw = target.viewYaw ?? target.yaw ?? 0;
     const speed = Math.abs(target.inVehicle?.speed ?? target.speed ?? 0);
-    const distance = opts.distance ?? (3.35 + blend * (6.5 - 3.35));
-    const height = opts.height ?? (1.82 + blend * (2.6 - 1.82));
-    const lookAhead = opts.lookAhead ?? (9 + blend * 4);
+    const distance = opts.distance ?? (3.2 + blend * (6.5 - 3.2));
+    const height = opts.height ?? (1.8 + blend * (2.6 - 1.8));
+    const lookAhead = opts.lookAhead ?? (11 + blend * 2);
     const pitch = Math.max(-0.04, Math.min(0.22, 0.03 + (target.viewPitch ?? 0) * 0.25));
     const forwardX = Math.sin(yaw);
     const forwardZ = Math.cos(yaw);
@@ -285,8 +285,8 @@ export class Engine {
     this.followTarget = target;
     this.lastGoal = goal;
     this.camera.position.sub(this.shakeOffset);
-    const stiffness = opts.stiffness ?? 48;
-    const damping = opts.damping ?? 12.5;
+    const stiffness = opts.stiffness ?? 36;
+    const damping = opts.damping ?? 10.5;
     const force = goal.desired.clone().sub(this.camera.position).multiplyScalar(stiffness)
       .addScaledVector(this.cameraVelocity, -damping);
     this.cameraVelocity.addScaledVector(force, dt);
@@ -303,7 +303,7 @@ export class Engine {
       this.shakeOffset.set(0, 0, 0);
     }
 
-    const wantedFov = 62 + goal.blend * 4 + Math.min(10, goal.speed * 0.22) - (goal.aimDistance > 10 && goal.blend < 0.5 ? 5 : 0);
+    const wantedFov = 62 + goal.blend * 4 + Math.min(10, goal.speed * 0.22);
     this.camera.fov += (wantedFov - this.camera.fov) * (1 - Math.exp(-4 * dt));
     this.camera.updateProjectionMatrix();
 
