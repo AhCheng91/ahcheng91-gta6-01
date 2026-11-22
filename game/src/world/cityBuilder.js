@@ -19,9 +19,33 @@ const FACADE_PALETTES = [
   { name: 'pale blue', colour: '#a7c2d6' },
 ];
 
+const FACADE_ACCENTS = ['#3b9b91', '#e87555', '#d8a54b', '#5d7d8c', '#b45c7d'];
+const WINDOW_TINTS = ['#2b4c5c', '#315a68', '#395f6b', '#2a4658', '#40616e'];
+const VENDOR_NAMES = ['MERCADO', 'SURF', 'TABACO', 'HOTEL SOL', 'PANADERIA', 'CAFE MAR'];
+
 function paletteFor(block, index) {
   const hash = [...`${block.id}${block.style}`].reduce((sum, char) => sum + char.charCodeAt(0), index);
   return FACADE_PALETTES[hash % FACADE_PALETTES.length];
+}
+
+function makeSignMaterial(label) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#201d1a';
+  context.fillRect(0, 0, 512, 128);
+  context.strokeStyle = '#e7c88f';
+  context.lineWidth = 8;
+  context.strokeRect(6, 6, 500, 116);
+  context.fillStyle = '#ffe6b0';
+  context.font = 'bold 62px Georgia, serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label, 256, 68, 470);
+  const texture = new THREE.CanvasTexture(canvas);
+  if ('colorSpace' in texture && THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ map: texture, fog: true });
 }
 
 function makeInstances(geometry, material, transforms, shadows = false, name = 'City instance') {
@@ -327,14 +351,18 @@ export class CityBuilder {
     const bodies = [];
     const setbacks = [];
     const cornices = [];
+    const floorBands = [];
     const shopGlass = [];
     const shopFrames = [];
-    const awnings = [];
-    const signBoxes = [];
+    const awningSlabs = [];
+    const awningStripes = [];
+    const signsByVendor = new Map(VENDOR_NAMES.map((name) => [name, []]));
     const windows = [];
     const frames = [];
     const sills = [];
-    const balconies = [];
+    const balconySlabs = [];
+    const balconyRails = [];
+    const balconyPosts = [];
     const tanks = [];
     const units = [];
     const antennae = [];
@@ -343,17 +371,28 @@ export class CityBuilder {
     for (const [index, block] of BLOCKS.entries()) {
       const { x, z, width, depth, height, style } = block;
       const palette = paletteFor(block, index);
+      const accent = FACADE_ACCENTS[(index + block.id.charCodeAt(1)) % FACADE_ACCENTS.length];
+      const windowTint = WINDOW_TINTS[index % WINDOW_TINTS.length];
       bodies.push({ ...box(x, height / 2, z, width, height, depth, palette.colour), label: palette.name });
       const nearestStreet = ROADS.filter((road) => road.axis === 'x')
         .sort((a, b) => Math.abs(a.at - z) - Math.abs(b.at - z))[0];
       const outward = nearestStreet && nearestStreet.at > z ? 1 : -1;
       const streetFace = z + outward * depth / 2;
 
-      shopGlass.push(box(x, 1.55, streetFace + outward * 0.16, width * 0.9, 2.65, 0.2, '#315661'));
+      // Ground floor: dark recessed glass, mullions, a shallow awning and a lettered sign box.
+      shopGlass.push(box(x, 1.55, streetFace + outward * 0.05, width * 0.88, 2.55, 0.12, '#16282d'));
       for (let mullion = -2; mullion <= 2; mullion += 1) {
-        shopFrames.push(box(x + mullion * width * 0.18, 1.55, streetFace + outward * 0.28, 0.16, 2.75, 0.3, '#efe0c2'));
+        shopFrames.push(box(x + mullion * width * 0.175, 1.55, streetFace + outward * 0.12, 0.13, 2.65, 0.16, '#e2d3b8'));
       }
-      shopFrames.push(box(x, 2.95, streetFace + outward * 0.3, width * 0.96, 0.22, 0.35, '#efe0c2'));
+      shopFrames.push(box(x, 2.86, streetFace + outward * 0.13, width * 0.9, 0.2, 0.2, '#e2d3b8'));
+      const awningY = 3.18;
+      awningSlabs.push(box(x, awningY, streetFace + outward * 0.31, width * 0.84, 0.13, 0.5, accent));
+      awningStripes.push(box(x, awningY - 0.11, streetFace + outward * 0.55, width * 0.84, 0.12, 0.07, '#f4e6c6'));
+      const vendor = VENDOR_NAMES[index % VENDOR_NAMES.length];
+      signsByVendor.get(vendor).push(box(x, 3.82, streetFace + outward * 0.34,
+        Math.min(width * 0.56, 8.4), 0.92, 0.32, '#ffffff', outward < 0 ? Math.PI : 0));
+      this.registerProp(`Shop awning ${block.id}`, x, streetFace + outward * 0.31, width * 0.42, 0.25, { kind: 'awning', attachedToFacade: true });
+      this.registerProp(`Shop sign ${block.id}`, x, streetFace + outward * 0.34, Math.min(width * 0.28, 4.2), 0.22, { kind: 'sign', attachedToFacade: true });
 
       if (height > 17 && style !== 'puerto') {
         setbacks.push(box(x, height + 1.7, z, width * 0.8, 3.4, depth * 0.8, palette.colour));
@@ -367,68 +406,67 @@ export class CityBuilder {
       cornices.push(box(x, height - 0.35, z, width + 0.9, 0.75, depth + 0.9, '#f6e7c9'));
       if (height > 22) cornices.push(box(x, height * 0.54, z, width + 0.45, 0.45, depth + 0.45, '#ead9b9'));
 
-      const rows = Math.min(18, Math.max(2, Math.floor((height - 3.5) / 3.4)));
+      const rows = Math.min(18, Math.max(2, Math.floor((height - 3.5) / 3.3)));
+      const balconyBuilding = style !== 'puerto' && (index * 7 + 3) % 5 < 2;
       for (const side of ['north', 'south', 'east', 'west']) {
         const alongZ = side === 'north' || side === 'south';
         const span = alongZ ? width : depth;
-        const columns = Math.max(1, Math.min(9, Math.floor(span / 3.1)));
+        const columns = span > 23 ? 4 : span > 15 ? 3 : 2;
         const face = alongZ ? z + (side === 'north' ? -depth / 2 - 0.08 : depth / 2 + 0.08) : x + (side === 'west' ? -width / 2 - 0.08 : width / 2 + 0.08);
         const facingOut = side === 'north' ? -1 : 1;
+        const winWidth = Math.max(0.9, Math.min(2.5, span / columns - 1.25));
+        const winHeight = 1.58;
         for (let row = 0; row < rows; row += 1) {
-          const y = 3.4 + row * 3.4;
+          const y = 3.5 + row * 3.3;
           if (y > height - 1.4) continue;
-          const hasBalconies = style === 'corona' || (style !== 'puerto' && (block.id.charCodeAt(1) || 0) % 3 === 0);
-          if (hasBalconies && row % 4 === 2) {
-            for (const bandSide of [-1, 1]) {
-              const bandX = alongZ ? x : face + bandSide * 0.12;
-              const bandZ = alongZ ? face + facingOut * 0.12 : z;
-              balconies.push(alongZ
-                ? box(bandX, y - 1.25, bandZ, width * 0.94, 0.18, 1.1, '#efe1c4')
-                : box(bandX, y - 1.25, bandZ, 1.1, 0.18, depth * 0.94, '#efe1c4'));
-            }
+          if (row > 0) {
+            if (alongZ) floorBands.push(box(x, y - 1.66, face, span, 0.15, 0.24, '#f0dfc1'));
+            else floorBands.push(box(face, y - 1.66, z, 0.24, 0.15, span, '#f0dfc1'));
           }
           for (let column = 0; column < columns; column += 1) {
             const along = -span / 2 + (column + 0.5) * span / columns;
-            const lit = random() < (row > rows * 0.6 ? 0.2 : 0.11);
-            const color = lit ? (random() < 0.5 ? '#ffd7a1' : '#ffecbd') : (random() < 0.3 ? '#2c4c5e' : '#345a6b');
+            const lit = random() < (row > rows * 0.6 ? 0.2 : 0.1);
+            const color = lit ? (random() < 0.5 ? '#ffd7a1' : '#ffecbd') : windowTint;
             if (alongZ) {
-              windows.push(box(x + along, y, face + facingOut * 0.14, 1.65, 1.7, 0.12, color));
-              frames.push(box(x + along, y + 0.88, face + facingOut * 0.2, 1.85, 0.12, 0.16, '#eadfc6'));
-              frames.push(box(x + along, y - 0.88, face + facingOut * 0.2, 1.85, 0.12, 0.16, '#eadfc6'));
-              frames.push(box(x + along - 0.84, y, face + facingOut * 0.2, 0.11, 1.8, 0.16, '#eadfc6'));
-              frames.push(box(x + along + 0.84, y, face + facingOut * 0.2, 0.11, 1.8, 0.16, '#eadfc6'));
-              sills.push(box(x + along, y - 1.0, face + facingOut * 0.24, 1.9, 0.14, 0.3, '#f2e4c6'));
+              windows.push(box(x + along, y, face + facingOut * 0.02, winWidth, winHeight, 0.08, color));
+              frames.push(box(x + along, y + winHeight / 2 + 0.04, face + facingOut * 0.08, winWidth + 0.16, 0.08, 0.07, '#6f5d49'));
+              frames.push(box(x + along, y - winHeight / 2 - 0.04, face + facingOut * 0.08, winWidth + 0.16, 0.08, 0.07, '#6f5d49'));
+              frames.push(box(x + along - winWidth / 2 - 0.04, y, face + facingOut * 0.08, 0.08, winHeight + 0.16, 0.07, '#6f5d49'));
+              frames.push(box(x + along + winWidth / 2 + 0.04, y, face + facingOut * 0.08, 0.08, winHeight + 0.16, 0.07, '#6f5d49'));
+              sills.push(box(x + along, y - winHeight / 2 - 0.13, face + facingOut * 0.14, winWidth + 0.24, 0.12, 0.26, '#f2e4c6'));
             } else {
-              windows.push(box(face + facingOut * 0.14, y, z + along, 0.12, 1.7, 1.65, color));
-              frames.push(box(face + facingOut * 0.2, y + 0.88, z + along, 0.16, 0.12, 1.85, '#eadfc6'));
-              frames.push(box(face + facingOut * 0.2, y - 0.88, z + along, 0.16, 0.12, 1.85, '#eadfc6'));
-              frames.push(box(face + facingOut * 0.2, y, z + along - 0.84, 0.16, 1.8, 0.11, '#eadfc6'));
-              frames.push(box(face + facingOut * 0.2, y, z + along + 0.84, 0.16, 1.8, 0.11, '#eadfc6'));
-              sills.push(box(face + facingOut * 0.24, y - 1.0, z + along, 0.3, 0.14, 1.9, '#f2e4c6'));
+              windows.push(box(face + facingOut * 0.02, y, z + along, 0.08, winHeight, winWidth, color));
+              frames.push(box(face + facingOut * 0.08, y + winHeight / 2 + 0.04, z + along, 0.07, 0.08, winWidth + 0.16, '#6f5d49'));
+              frames.push(box(face + facingOut * 0.08, y - winHeight / 2 - 0.04, z + along, 0.07, 0.08, winWidth + 0.16, '#6f5d49'));
+              frames.push(box(face + facingOut * 0.08, y, z + along - winWidth / 2 - 0.04, 0.07, winHeight + 0.16, 0.08, '#6f5d49'));
+              frames.push(box(face + facingOut * 0.08, y, z + along + winWidth / 2 + 0.04, 0.07, winHeight + 0.16, 0.08, '#6f5d49'));
+              sills.push(box(face + facingOut * 0.14, y - winHeight / 2 - 0.13, z + along, 0.26, 0.12, winWidth + 0.24, '#f2e4c6'));
             }
           }
         }
       }
 
-      if (style === 'malecon' || style === 'barrio' || style === 'playa') {
-        const awningZ = streetFace + outward * 1.05;
-        awnings.push(box(x, 3.3, awningZ, width * 0.8, 0.18, 2.1, outward < 0 ? '#e87555' : '#3b9b91'));
-        this.registerProp(`Awning ${block.id}`, x, awningZ, width * 0.4, 1.05, { kind: 'awning', attachedToFacade: true });
-        if (random() < 0.7) {
-          const neon = ['#ff8f6d', '#64d9c4', '#ffd36b', '#e98bd3'];
-          const signZ = streetFace + outward * 0.22;
-          signBoxes.push(box(x, 4.25, signZ, Math.min(width * 0.55, 9), 1.0, 0.44, neon[Math.floor(random() * neon.length)]));
-          this.registerProp(`Shop sign ${block.id}`, x, signZ, Math.min(width * 0.275, 4.5), 0.22, { kind: 'sign', attachedToFacade: true });
+      // Balconies with a 0.9 m slab, two rails and three posts on about 40% of buildings.
+      if (balconyBuilding) {
+        const balconyWidth = Math.min(width * 0.72, 7.2);
+        const railZ = streetFace + outward * 0.92;
+        for (let row = 1; row < Math.min(rows, 6); row += 1) {
+          const slabY = 3.5 + row * 3.3 - 1.55;
+          balconySlabs.push(box(x, slabY, streetFace + outward * 0.46, balconyWidth, 0.13, 0.9, '#efe1c4'));
+          balconyRails.push(box(x, slabY + 0.52, railZ, balconyWidth, 0.06, 0.06, '#7d8b87'));
+          balconyRails.push(box(x, slabY + 0.94, railZ, balconyWidth, 0.06, 0.06, '#7d8b87'));
+          for (const post of [-1, 0, 1]) {
+            balconyPosts.push(box(x + post * balconyWidth * 0.4, slabY + 0.48, railZ, 0.05, 0.98, 0.05, '#7d8b87'));
+          }
         }
       }
 
-      if (block.tanks || height > 22) {
-        tanks.push({ x: x + width * 0.22, y: height + 1.4, z: z - depth * 0.18, sx: 1.5, sy: 2.8, sz: 1.5, color: '#8d9c92' });
-        units.push(box(x - width * 0.25, height + 0.5, z + depth * 0.2, 2.1, 1, 1.5, '#b3bbb4'));
-        units.push(box(x + width * 0.05, height + 0.5, z - depth * 0.25, 1.6, 0.9, 1.2, '#a9b2ad'));
-        antennae.push({ x: x - width * 0.18, y: height + 4, z: z + depth * 0.1, sx: 0.09, sy: 7, sz: 0.09, color: '#5a6668' });
-        stairHuts.push(box(x + width * 0.24, height + 1.3, z + depth * 0.22, 3.2, 2.6, 3, '#d9cdb2'));
-      }
+      // Every roof gets a tank, two AC boxes, an antenna mast and a stair hut.
+      tanks.push({ x: x + width * 0.22, y: height + 1.4, z: z - depth * 0.18, sx: 1.5, sy: 2.8, sz: 1.5, color: '#8d9c92' });
+      units.push(box(x - width * 0.26, height + 0.55, z + depth * 0.2, 2.0, 0.95, 1.45, '#b3bbb4'));
+      units.push(box(x + width * 0.06, height + 0.55, z - depth * 0.26, 1.5, 0.85, 1.15, '#a9b2ad'));
+      antennae.push({ x: x - width * 0.18, y: height + 4.5, z: z + depth * 0.1, sx: 0.09, sy: 8, sz: 0.09, color: '#5a6668' });
+      stairHuts.push(box(x + width * 0.25, height + 1.3, z + depth * 0.22, 3.2, 2.6, 3, '#d9cdb2'));
     }
 
     const concrete = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88 });
@@ -436,14 +474,20 @@ export class CityBuilder {
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, bodies, true, 'Building facades'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, setbacks, true, 'Building setbacks'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, cornices, true, 'Building cornices'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, floorBands, false, 'Facade floor cornices'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), glass, shopGlass, false, 'Shopfront glass'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, shopFrames, false, 'Shopfront frames'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: true }), windows, false, 'Window glass'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, frames, false, 'Window frames'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, sills, false, 'Window sills'));
-    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, balconies, true, 'Balcony bands'));
-    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, awnings, true, 'Facade awnings'));
-    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: true }), signBoxes, false, 'Shop sign boxes'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, balconySlabs, true, 'Balcony slabs'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.7, metalness: 0.2 }), balconyRails, false, 'Balcony rails'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.7, metalness: 0.2 }), balconyPosts, false, 'Balcony posts'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, awningSlabs, true, 'Facade awnings'));
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, awningStripes, false, 'Awning stripes'));
+    for (const [vendor, transforms] of signsByVendor) {
+      this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), makeSignMaterial(vendor), transforms, false, `Shop sign ${vendor}`));
+    }
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 8), concrete, tanks, true, 'Rooftop water tanks'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), concrete, units, true, 'Rooftop AC units'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 5), concrete, antennae, false, 'Rooftop antennae'));

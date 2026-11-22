@@ -27,13 +27,33 @@ function pinCamera(game, desired, lookAt) {
   game.engine.camera.updateProjectionMatrix();
 }
 
+function logShotStats(game) {
+  const renderer = game.engine.renderer;
+  const shadow = game.engine.shadowReport();
+  console.info('[shot:render]', JSON.stringify({
+    calls: renderer.info.render.calls,
+    triangles: renderer.info.render.triangles,
+    shadowMapEnabled: renderer.shadowMap.enabled,
+    sunCastShadow: game.engine.sun.castShadow,
+    shadowMapSize: [game.engine.sun.shadow.mapSize.x, game.engine.sun.shadow.mapSize.y],
+    shadowCameraBounds: shadow.bounds,
+    shadowBias: game.engine.sun.shadow.bias,
+    shadowNormalBias: game.engine.sun.shadow.normalBias,
+  }));
+}
+
 export async function applyScreenshotPreset(game, name) {
   if (!name) return false;
   const shot = String(name).toLowerCase();
-  if (shot === 'chase') return stageChase(game);
-  if (shot === 'shootout') return stageShootout(game);
-  if (shot === 'drive') return stageDrive(game);
-  if (shot === 'menu') return stageMenu(game);
+  async function run(stage) {
+    const result = await stage(game);
+    logShotStats(game);
+    return result;
+  }
+  if (shot === 'chase') return run(stageChase);
+  if (shot === 'shootout') return run(stageShootout);
+  if (shot === 'drive') return run(stageDrive);
+  if (shot === 'menu') return run(stageMenu);
   return false;
 }
 
