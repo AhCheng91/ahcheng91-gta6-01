@@ -376,7 +376,7 @@ export class MareaRojaGame {
     this.updatePrompt();
     this.showCurrentDistrict();
     this.city.update(dt);
-    this.engine.followCamera(this.player, { dt });
+    this.engine.followCamera(this.player, { dt, ...(this.shotCamera ?? {}) });
     this.hud.tick(dt);
     this.minimap.draw({
       player: this.player,
@@ -486,6 +486,7 @@ export class MareaRojaGame {
     this.playerShooting = true;
     this.audio.gunshot(weapon.id);
     this.player.recoil = weapon.id === 'shotgun' ? 0.55 : weapon.id === 'rifle' ? 0.28 : 0.2;
+    this.player.showMuzzleFlash(weapon.id === 'shotgun' ? 0.16 : 0.1);
     this.engine.addShake(weapon.id === 'shotgun' ? 0.3 : weapon.kind === 'grenade' ? 0.1 : 0.12);
     this.hud.setWeapons(this.player.weapons, weapon.id);
   }

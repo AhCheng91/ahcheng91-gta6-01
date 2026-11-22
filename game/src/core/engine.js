@@ -261,8 +261,8 @@ export class Engine {
     return { desired, lookAt, speed, blend, aimDistance, distance, height };
   }
 
-  snapCamera(target) {
-    const goal = this.cameraGoal(target);
+  snapCamera(target, opts = {}) {
+    const goal = this.cameraGoal(target, opts);
     this.followTarget = target;
     this.lastGoal = goal;
     this.camera.position.copy(goal.desired);

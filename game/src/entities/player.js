@@ -4,6 +4,26 @@ import * as THREE from 'three';
 import { isBuildingFootprint, coastalLimit } from '../world/cityLayout.js';
 import { makeContactShadow } from '../core/engine.js';
 
+function makeMuzzleFlash() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(16, 16, 1, 16, 16, 15);
+  gradient.addColorStop(0, 'rgba(255,255,240,1)');
+  gradient.addColorStop(0.35, 'rgba(255,214,130,0.9)');
+  gradient.addColorStop(1, 'rgba(255,140,60,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 32, 32);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(canvas), color: '#fff0c8', transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  sprite.scale.set(0.62, 0.62, 1);
+  sprite.visible = false;
+  return sprite;
+}
+
 function buildPedestrianMesh() {
   const group = new THREE.Group();
   group.name = 'Rafa Quintero';
@@ -48,10 +68,13 @@ function buildPedestrianMesh() {
   grip.position.set(0, -0.19, -0.16);
   pistol.add(grip);
   pistol.position.set(0.46, 1.25, 0.5);
-  pistol.rotation.x = Math.PI / 2;
+  pistol.rotation.x = -0.08;
   pistol.visible = false;
+  const muzzleFlash = makeMuzzleFlash();
+  muzzleFlash.position.set(0, 0, 0.34);
+  pistol.add(muzzleFlash);
   group.add(pistol);
-  return { group, legs, arms, torso, head, pistol };
+  return { group, legs, arms, torso, head, pistol, muzzleFlash };
 }
 
 function shortestAngle(angle) {
@@ -75,6 +98,7 @@ export class Player {
     this.grounded = true;
     this.stride = 0;
     this.aiming = false;
+    this.aimingOverride = false;
     this.crouching = false;
     this.runToggled = false;
     this.cameraBlend = 0;
@@ -99,6 +123,8 @@ export class Player {
     this.torso = model.torso;
     this.head = model.head;
     this.pistol = model.pistol;
+    this.muzzleFlash = model.muzzleFlash;
+    this.muzzleTimer = 0;
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.facing;
     this.contactShadow = makeContactShadow(0.85);
@@ -120,7 +146,7 @@ export class Player {
     this.updateLook(input);
     if (input.wasPressed('KeyX')) this.runToggled = !this.runToggled;
     if (input.wasPressed('KeyC')) this.crouching = !this.crouching;
-    this.aiming = input.mouseDown(2) || input.isDown('KeyQ');
+    this.aiming = this.aimingOverride || input.mouseDown(2) || input.isDown('KeyQ');
     const axis = input.movementAxis();
     const forwardX = Math.sin(this.viewYaw);
     const forwardZ = Math.cos(this.viewYaw);
@@ -186,7 +212,14 @@ export class Player {
     this.cameraBlend += (this.cameraBlendTarget - this.cameraBlend) * Math.min(1, dt * 5.5);
   }
 
+  showMuzzleFlash(seconds = 0.1) {
+    this.muzzleTimer = Math.max(this.muzzleTimer, seconds);
+    this.muzzleFlash.visible = true;
+  }
+
   animateStride(dt) {
+    this.muzzleTimer = Math.max(0, this.muzzleTimer - dt);
+    this.muzzleFlash.visible = this.muzzleTimer > 0;
     this.contactShadow.position.y = 0.035 - this.position.y;
     this.contactShadow.material.opacity = 0.75 * Math.max(0.15, 1 - this.position.y * 0.3);
     this.stride += this.speed * dt * 2.3;
