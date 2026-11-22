@@ -224,10 +224,14 @@ async function stageShootout(game) {
 async function stageDrive(game) {
   game.timeOfDay = 16.5;
   game.engine.setTimeOfDay(game.timeOfDay);
+  restoreFollowCamera(game);
+
   const hero = game.heroVehicle;
+  const heading = Math.PI / 2;
+  const heroPos = new THREE.Vector3(-250, 0, -22);
   if (hero) {
-    hero.position.set(-250, 0, -22);
-    hero.heading = Math.PI / 2;
+    hero.position.copy(heroPos);
+    hero.heading = heading;
     hero.speed = 16;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
@@ -241,7 +245,30 @@ async function stageDrive(game) {
   game.hud.say('MIRA KESANG', 'Keep it smooth, Rafa. Puerto Marea is watching.');
   game.hud.setRadio('LAGOON FM 98.1', 'SYNTHWAVE');
   await settle(game, 60);
-  lockCamera(game, true, 16);
+
+  const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const left = new THREE.Vector3(-Math.cos(heading), 0, Math.sin(heading));
+  // Mid-block on Malecón, away from crosswalk intersections; camera left/rear for beach view.
+  const cameraPos = heroPos.clone().addScaledVector(forward, -6.8).addScaledVector(left, 1.4).setY(2.2);
+  const lookAt = heroPos.clone().addScaledVector(forward, 14).addScaledVector(left, -2.5).setY(1.1);
+
+  for (const ped of game.pedestrians.peds) {
+    const dx = ped.position.x - cameraPos.x;
+    const dz = ped.position.z - cameraPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 8) {
+      const push = dist > 0.001 ? (8.5 - dist) / dist : 8.5;
+      ped.position.x += dx * push;
+      ped.position.z += dz * push;
+      ped.group.position.copy(ped.position);
+      ped.target = null;
+    }
+  }
+
+  game.shotSpeed = 16;
+  game.shotCamera = null;
+  lockCamera(game, true, 16, {});
+  pinCamera(game, cameraPos, lookAt);
   return true;
 }
 
