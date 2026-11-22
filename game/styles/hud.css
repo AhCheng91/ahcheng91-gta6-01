@@ -597,10 +597,18 @@ html, body {
   font-family: var(--font);
   color: var(--text);
 }
+#menu-root.paused::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 9, 14, 0.58);
+  pointer-events: none;
+}
 
 #title-screen {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -651,6 +659,7 @@ html, body {
 
 .menu-window {
   position: absolute;
+  z-index: 1;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);

@@ -417,6 +417,10 @@ export class Hud {
     this.elements.hud.classList.toggle('dimmed', Boolean(dimmed));
   }
 
+  setHidden(hidden = false) {
+    this.elements.hud.classList.toggle('hidden', Boolean(hidden));
+  }
+
   setRep(rank, xp, next) {
     setText(this.elements.repRank, rank ?? 'DOCK HAND');
     setText(this.elements.repValue, Math.round(xp ?? 0));

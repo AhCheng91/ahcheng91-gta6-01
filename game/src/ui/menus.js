@@ -126,15 +126,19 @@ export class Menus {
   show(section) {
     for (const [name, element] of Object.entries(this.sections)) element.classList.toggle('hidden', name !== section);
     this.root.classList.remove('hidden');
+    this.root.classList.toggle('paused', section === 'pause');
     this.mode = section;
     this.game.hud.setDimmed(true);
+    this.game.hud.setHidden(true);
   }
 
   close() {
     this.root.classList.add('hidden');
+    this.root.classList.remove('paused');
     for (const element of Object.values(this.sections)) element.classList.add('hidden');
     this.mode = 'closed';
     this.game.hud.setDimmed(false);
+    this.game.hud.setHidden(false);
     this.game.input.locked = false;
     if (document.exitPointerLock && document.pointerLockElement) document.exitPointerLock();
   }
