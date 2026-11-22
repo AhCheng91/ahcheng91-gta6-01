@@ -92,7 +92,7 @@ const MARKUP = `
     <div id="mission-overlay-reward"></div>
     <button id="mission-overlay-retry" type="button">RETRY JOB</button>
   </section>
-  <div id="debug-line">WASD MOVE · SHIFT RUN · C COVER · RMB AIM · LMB FIRE · F CAR · E JOB / GARAGE · H HORN · B RADIO · M MUTE · ESC MENU · 1-6 WEAPONS</div>
+  <div id="debug-line">WASD MOVE · SHIFT RUN · RMB AIM · LMB FIRE · F CAR · E JOB · ESC MENU · 1-6 WEAPONS</div>
 </div>`;
 
 const WEAPON_IDS = ['fists', 'pistol', 'smg', 'shotgun', 'rifle', 'grenade'];
@@ -211,6 +211,8 @@ export class Hud {
     this.slots = Array.from(document.querySelectorAll('#weapon-wheel .weapon-slot'));
     this.slots.forEach((slot, index) => drawWeaponIcon(slot.querySelector('canvas'), WEAPON_IDS[index]));
     this.elapsed = 0;
+    this.hintsUntil = performance.now() + 8000;
+    this.elements.hud.querySelector('#debug-line')?.classList.remove('faded');
     this.subtitleUntil = 0;
     this.districtUntil = 0;
     this.damageUntil = 0;
@@ -493,6 +495,10 @@ export class Hud {
   tick(dt) {
     this.elapsed += dt;
     const now = performance.now();
+    if (this.hintsUntil && now > this.hintsUntil) {
+      this.elements.hud.querySelector('#debug-line')?.classList.add('faded');
+      this.hintsUntil = 0;
+    }
     if (this.subtitleUntil && now > this.subtitleUntil) {
       this.elements.subtitle.classList.add('hidden');
       this.subtitleUntil = 0;

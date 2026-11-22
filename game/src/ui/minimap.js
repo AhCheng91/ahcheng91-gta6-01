@@ -50,24 +50,26 @@ export class Minimap {
     ctx.save();
     roundedPath(ctx, 0, 0, width, height, 6);
     ctx.clip();
-    ctx.fillStyle = '#102b35';
+    ctx.fillStyle = '#12333d';
     ctx.fillRect(0, 0, width, height);
 
     const shoreY = toY(-52);
     if (shoreY > -10) {
-      ctx.fillStyle = '#24616c';
+      ctx.fillStyle = '#1d5666';
       ctx.fillRect(0, 0, width, Math.max(0, shoreY));
-      ctx.fillStyle = 'rgba(196, 235, 217, 0.45)';
-      ctx.fillRect(0, shoreY - 1.2, width, 1.6);
-      ctx.fillStyle = 'rgba(228, 246, 230, 0.11)';
+      ctx.fillStyle = 'rgba(240, 201, 139, 0.85)';
+      ctx.fillRect(0, shoreY - 2, width, 2.6);
+      ctx.fillStyle = 'rgba(215, 243, 224, 0.6)';
+      ctx.fillRect(0, shoreY - 3.4, width, 1);
+      ctx.fillStyle = 'rgba(228, 246, 230, 0.14)';
       for (let x = 8; x < width; x += 26) ctx.fillRect(x, shoreY * 0.45, 12, 1);
     }
 
-    ctx.fillStyle = 'rgba(231, 214, 176, 0.075)';
     for (const block of BLOCKS) {
       const left = toX(block.x - block.width / 2);
       const top = toY(block.z - block.depth / 2);
       if (left < -50 || top < -50 || left > width + 50 || top > height + 50) continue;
+      ctx.fillStyle = `${districtAt(block.x, block.z).tint}3d`;
       ctx.fillRect(left, top, block.width * this.scale, block.depth * this.scale);
     }
 
@@ -190,9 +192,11 @@ export class Minimap {
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(-yaw);
-    ctx.fillStyle = '#7ff0da';
+    ctx.fillStyle = '#a7fff0';
     ctx.strokeStyle = '#062026';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(105, 240, 218, 0.9)';
+    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(0, 8);
     ctx.lineTo(-5.5, -6);
@@ -201,6 +205,7 @@ export class Minimap {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.restore();
 
     ctx.fillStyle = 'rgba(6, 18, 24, 0.7)';
