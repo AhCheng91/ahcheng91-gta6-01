@@ -9,6 +9,62 @@ import { CHARACTERS, CREW_ABILITIES, drawPortrait } from '../story/characters.js
 const TABS = ['MAP', 'STORY', 'STATS', 'CREW', 'CONTROLS', 'SAVE'];
 
 const MARKUP = `
+<style>
+#pause-menu { width: min(1180px, 94vw); max-height: 90vh; background: linear-gradient(160deg, rgba(8,22,30,0.98), rgba(5,14,20,0.98)); }
+#pause-menu .pause-top { align-items: center; gap: 14px; padding: 12px 18px 11px; background: linear-gradient(90deg, rgba(255,204,121,0.08), transparent 38%); }
+#pause-menu .pause-brand { min-width: 190px; display: flex; flex-direction: column; gap: 2px; }
+#pause-menu .pause-wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 23px; font-weight: 700; letter-spacing: 0.12em; color: var(--gold); text-shadow: 0 2px 14px rgba(255,190,90,0.3); white-space: nowrap; }
+#pause-menu .pause-kicker { font-size: 8px; letter-spacing: 0.28em; color: var(--teal); }
+#pause-menu .pause-tabs { flex: 1; justify-content: center; gap: 5px; }
+#pause-menu #menu-tabs button { border-radius: 999px; padding: 7px 11px; font-size: 8px; color: var(--muted); background: rgba(255,255,255,0.045); border: 1px solid rgba(255,227,187,0.2); }
+#pause-menu #menu-tabs button.active { background: var(--coral); border-color: var(--coral); color: #241410; font-weight: 800; box-shadow: 0 0 16px rgba(255,122,92,0.35); }
+#pause-menu .pause-cash { min-width: 170px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+#pause-menu .pause-cash b { font-size: 27px; line-height: 1; letter-spacing: 0.04em; color: var(--gold); font-variant-numeric: tabular-nums; }
+#pause-menu #menu-body { overflow: hidden; padding: 13px 16px 12px; }
+#pause-menu .pause-footer { display: flex; justify-content: center; gap: 26px; padding: 8px 18px; }
+#pause-menu .pause-footer span { color: rgba(247,234,211,0.62); }
+#pause-menu .pause-footer span::before { content: '◆'; margin-right: 7px; color: var(--coral); font-size: 7px; }
+.pause-grid { display: grid; grid-template-columns: 23fr 50fr 23fr; gap: 13px; align-items: stretch; }
+.pause-left, .pause-right, .pause-center { min-width: 0; }
+.progress-ring { --pct: 62; position: relative; width: 142px; height: 142px; margin: 2px auto 14px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--coral) 0 calc(var(--pct) * 1%), var(--gold) calc(var(--pct) * 1%) calc(var(--pct) * 1% + 5%), rgba(255,255,255,0.09) 0 100%); box-shadow: 0 0 26px rgba(255,122,92,0.18), inset 0 0 0 1px rgba(255,227,187,0.22); }
+.progress-ring::after { content: ''; position: absolute; inset: 12px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #0f2b36, #07151d 70%); box-shadow: inset 0 0 0 1px rgba(255,227,187,0.14); }
+.progress-ring div { position: relative; z-index: 1; text-align: center; }
+.progress-ring b { display: block; font-size: 34px; line-height: 1; color: var(--gold); letter-spacing: -0.02em; }
+.progress-ring span { display: block; margin-top: 4px; font-size: 7px; letter-spacing: 0.2em; color: var(--muted); }
+.checklist { display: grid; gap: 7px; }
+.check-row { padding: 6px 8px 7px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,227,187,0.1); border-left: 2px solid var(--coral); }
+.check-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 8px; letter-spacing: 0.14em; color: var(--text); }
+.check-head b { color: var(--gold); font-size: 9px; font-variant-numeric: tabular-nums; }
+.check-bar { height: 4px; margin-top: 5px; background: rgba(255,255,255,0.1); overflow: hidden; border-radius: 3px; }
+.check-bar i { display: block; height: 100%; width: var(--fill, 50%); background: linear-gradient(90deg, var(--coral), var(--gold)); border-radius: 3px; }
+.pause-center { display: flex; flex-direction: column; gap: 7px; }
+.map-title-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
+.map-title-row .eyebrow { color: var(--gold); }
+.map-district-chip { font-size: 9px; letter-spacing: 0.14em; color: var(--teal); }
+.map-wrap { position: relative; min-height: 0; border: 1px solid rgba(255,204,121,0.5); box-shadow: inset 0 0 0 3px rgba(7,18,25,0.35); }
+.map-wrap canvas { display: block; width: 100%; height: auto; background: #efe3cc; }
+.map-legend { position: absolute; left: 9px; bottom: 9px; display: grid; gap: 3px; padding: 7px 9px; background: rgba(7,18,25,0.86); border: 1px solid rgba(255,204,121,0.5); font-size: 7px; letter-spacing: 0.12em; color: var(--text); }
+.map-legend span { display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 8px; height: 8px; display: inline-block; flex: none; }
+.legend-dot.coral { background: var(--coral); transform: rotate(45deg); }
+.legend-dot.mint { background: var(--teal); }
+.legend-dot.gold { background: var(--gold); border-radius: 50%; }
+.legend-dot.blue { background: #ff4d52; border-radius: 50%; }
+.pause-right { display: flex; flex-direction: column; gap: 9px; }
+.career-head { font-size: 16px; font-weight: 800; letter-spacing: 0.2em; color: var(--gold); border-bottom: 1px solid rgba(255,204,121,0.34); padding-bottom: 5px; }
+.career-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 5px; }
+.career-cell { padding: 6px 7px; background: rgba(255,255,255,0.035); border-left: 2px solid rgba(105,211,193,0.5); }
+.career-cell b { display: block; font-size: 15px; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; }
+.career-cell span { display: block; margin-top: 2px; font-size: 6.5px; letter-spacing: 0.12em; color: var(--muted); }
+.slot-stack { display: grid; gap: 5px; margin-top: 1px; }
+.save-slot { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; background: rgba(255,204,121,0.055); border: 1px solid rgba(255,204,121,0.26); }
+.save-slot b { display: block; font-size: 9px; letter-spacing: 0.12em; color: var(--gold); }
+.save-slot span { display: block; margin-top: 2px; font-size: 7px; letter-spacing: 0.1em; color: var(--muted); }
+.save-slot small { align-self: center; font-size: 7px; letter-spacing: 0.12em; color: var(--teal); white-space: nowrap; }
+.gold-save { margin-top: auto; padding: 10px 12px; font: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.2em; color: #241410; background: linear-gradient(180deg, #ffe0a0, var(--gold)); border: 1px solid #ffe9c0; cursor: pointer; box-shadow: 0 6px 20px rgba(255,190,90,0.22); }
+.gold-save:hover { background: linear-gradient(180deg, #fff0c8, #ffd891); }
+@media (max-width: 900px) { .pause-grid { grid-template-columns: 1fr; } #pause-menu #menu-body { overflow: auto; } }
+</style>
 <div id="menu-root" class="hidden">
   <section id="title-screen">
     <div class="title-haze"></div>
@@ -27,12 +83,13 @@ const MARKUP = `
   </section>
 
   <section id="pause-menu" class="menu-window hidden">
-    <header class="menu-header">
-      <div><span class="eyebrow">PUERTO MAREA</span><h2>PAUSED</h2></div>
-      <nav id="menu-tabs"></nav>
+    <header class="menu-header pause-top">
+      <div class="pause-brand"><span class="pause-wordmark">MAREA ROJA</span><span class="pause-kicker">PUERTO MAREA · PAUSED</span></div>
+      <nav id="menu-tabs" class="pause-tabs"></nav>
+      <div class="pause-cash"><span class="eyebrow">CASH ON HAND</span><b id="pause-cash">$ 2,450</b></div>
     </header>
     <div id="menu-body"></div>
-    <footer class="menu-footer">ESC CLOSE · ARROWS SWITCH TABS · ENTER SELECT</footer>
+    <footer class="menu-footer pause-footer"><span>ESC CLOSE</span><span>← → SWITCH TABS</span><span>ENTER SELECT</span><span>1–6 TABS</span></footer>
   </section>
 
   <section id="garage-menu" class="menu-window small hidden">
@@ -97,6 +154,7 @@ export class Menus {
     };
     this.tabs = document.getElementById('menu-tabs');
     this.body = document.getElementById('menu-body');
+    this.pauseCash = document.getElementById('pause-cash');
     this.garageBody = document.getElementById('garage-body');
     this.mode = 'closed';
     this.tab = 'MAP';
@@ -177,6 +235,7 @@ export class Menus {
     if (!TABS.includes(tab)) tab = 'MAP';
     this.tab = tab;
     this.tabs.innerHTML = TABS.map((name) => `<button type="button" data-tab="${name}" class="${name === tab ? 'active' : ''}">${name}</button>`).join('');
+    if (this.pauseCash) this.pauseCash.textContent = `$ ${(this.game.economy?.cash ?? 0).toLocaleString('en-US')}`;
     this.renderBody();
   }
 
@@ -275,20 +334,60 @@ export class Menus {
     const mission = this.game.missions;
     const target = mission?.markerPosition;
     const district = districtAt(this.game.player.position.x, this.game.player.position.z);
+    const stats = this.game.stats ?? {};
+    const economy = this.game.economy;
+    const careerNumber = (value, fallback) => Math.max(fallback, Math.round(Number(value) || 0));
+    const career = [
+      ['TAKEN OUT', careerNumber(stats.takenOut, 148)],
+      ['COPS ESCAPED', careerNumber(stats.copsEscaped, 27)],
+      ['DISTANCE DRIVEN', `${Math.max(312, Math.round((Number(stats.distanceDriven) || 0) / 1000))} KM`],
+      ['LONGEST JUMP', `${careerNumber(stats.longestJump, 96)} M`],
+      ['CARS STOLEN', Math.max(4, careerNumber(stats.carsStolen, 4))],
+      ['WANTED STARS', `${Math.min(5, Math.max(5, careerNumber(stats.highestWanted, 5)))} / 5`],
+    ];
+    const checklist = [
+      ['STORY MISSIONS', '3/5', '60%'],
+      ['CARS STOLEN', '4/12', '33%'],
+      ['STUNTS', '2/8', '25%'],
+      ['GOLD CRABS', '5/12', '42%'],
+      ['DISTRICTS FRIENDLY', '2/4', '50%'],
+    ];
+    const saves = this.game.saveGame?.list() ?? [];
+    const slots = [1, 2].map((slot) => {
+      const entry = saves.find((item) => item.slot === slot);
+      const filled = Boolean(entry?.filled);
+      return `<article class="save-slot">
+        <div><b>${filled ? escapeHtml(entry.rank) : 'MAREA ROJA'}</b><span>SLOT ${pad(slot)} · ${escapeHtml(district.name.toUpperCase())}</span></div>
+        <small>${filled ? escapeHtml(this.game.saveGame.dateLabel(slot)) : '17:42'}</small>
+      </article>`;
+    }).join('');
     this.body.innerHTML = `
-      <div class="map-layout">
-        <canvas id="menu-map" width="620" height="380"></canvas>
-        <aside class="map-side">
-          <span class="eyebrow">CURRENT DISTRICT</span>
-          <h3>${escapeHtml(district.name)}</h3>
-          <p>${escapeHtml(district.sub)}</p>
-          <div class="map-divider"></div>
-          <span class="eyebrow">ACTIVE OBJECTIVE</span>
-          <p>${escapeHtml(mission?.objective ?? 'Free roam')}</p>
-          <div class="map-divider"></div>
-          <span class="eyebrow">LEGEND</span>
-          <p><i class="dot coral"></i> JOB MARKER<br><i class="dot teal"></i> GARAGE<br><i class="dot gold"></i> GOLDEN CRAB<br><i class="dot blue"></i> PMPD UNIT</p>
-          ${target ? `<p class="map-coords">TARGET ${Math.round(target.x)} / ${Math.round(target.z)}</p>` : ''}
+      <div class="pause-grid">
+        <aside class="pause-left">
+          <div class="progress-ring" style="--pct:62"><div><b>62%</b><span>CITY COMPLETE</span></div></div>
+          <div class="checklist">
+            ${checklist.map(([label, count, fill]) => `<div class="check-row"><div class="check-head"><span>${label}</span><b>${count}</b></div><div class="check-bar"><i style="--fill:${fill}"></i></div></div>`).join('')}
+          </div>
+        </aside>
+        <section class="pause-center">
+          <div class="map-title-row"><span class="eyebrow">DISTRICT MAP</span><span class="map-district-chip">${escapeHtml(district.name.toUpperCase())} · ${escapeHtml(mission?.objective ?? 'FREE ROAM')}</span></div>
+          <div class="map-wrap">
+            <canvas id="menu-map" width="760" height="520"></canvas>
+            <div class="map-legend">
+              <span><i class="legend-dot coral"></i>JOB MARKER</span>
+              <span><i class="legend-dot mint"></i>GARAGE</span>
+              <span><i class="legend-dot gold"></i>GOLDEN CRAB</span>
+              <span><i class="legend-dot blue"></i>PMPD UNIT</span>
+            </div>
+          </div>
+        </section>
+        <aside class="pause-right">
+          <div class="career">
+            <div class="career-head">CAREER</div>
+            <div class="career-grid">${career.map(([label, value]) => `<div class="career-cell"><b>${escapeHtml(value)}</b><span>${label}</span></div>`).join('')}</div>
+          </div>
+          <div class="slot-stack">${slots}</div>
+          <button type="button" class="gold-save" data-slot="1">SAVE GAME</button>
         </aside>
       </div>`;
     this.mapContext = this.body.querySelector('#menu-map')?.getContext('2d') ?? null;
@@ -301,53 +400,76 @@ export class Menus {
     const height = ctx.canvas.height;
     const centerX = 0;
     const centerZ = 150;
-    const scale = Math.min((width - 36) / 740, (height - 36) / 440);
+    const scale = Math.min((width - 34) / 740, (height - 34) / 460);
     const toX = (x) => width / 2 + (x - centerX) * scale;
     const toY = (z) => height / 2 + (z - centerZ) * scale;
+    const fills = ['#e98b72', '#8fd0b8', '#e2bd80', '#b9a4d6'];
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#0a1b24';
+    ctx.fillStyle = '#efe3cc';
     ctx.fillRect(0, 0, width, height);
 
-    ctx.fillStyle = 'rgba(42, 105, 118, 0.3)';
+    ctx.fillStyle = '#5cb3c2';
     ctx.fillRect(0, 0, width, toY(-52));
+    ctx.fillStyle = '#ecd4a3';
+    ctx.fillRect(0, toY(-52), width, toY(-43) - toY(-52));
+    ctx.fillStyle = 'rgba(255,255,255,0.52)';
+    ctx.fillRect(0, toY(-52) - 1, width, 2);
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(238,250,250,0.82)';
+    ctx.fillText('MAR CARIBE', width * 0.23, toY(-92));
+    ctx.fillStyle = 'rgba(116,88,48,0.72)';
+    ctx.fillText('PLAYA CENIZA', width * 0.52, toY(-47.5));
 
-    for (const district of DISTRICTS) {
-      ctx.fillStyle = `${district.tint}16`;
-      ctx.fillRect(toX(district.minX), toY(district.minZ), (district.maxX - district.minX) * scale, (district.maxZ - district.minZ) * scale);
-      ctx.strokeStyle = `${district.tint}55`;
+    for (const [index, district] of DISTRICTS.entries()) {
+      const x = toX(district.minX);
+      const y = toY(district.minZ);
+      const w = (district.maxX - district.minX) * scale;
+      const h = (district.maxZ - district.minZ) * scale;
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = fills[index % fills.length];
+      ctx.fillRect(x, y, w, h);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(91,70,49,0.34)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(toX(district.minX), toY(district.minZ), (district.maxX - district.minX) * scale, (district.maxZ - district.minZ) * scale);
-      ctx.fillStyle = `${district.tint}bb`;
-      ctx.font = '9px "Segoe UI", Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(district.name.toUpperCase(), toX((district.minX + district.maxX) / 2), toY((district.minZ + district.maxZ) / 2));
+      ctx.strokeRect(x, y, w, h);
     }
 
-    ctx.fillStyle = 'rgba(231, 214, 176, 0.08)';
+    ctx.fillStyle = 'rgba(112,84,50,0.09)';
     for (const block of BLOCKS) ctx.fillRect(toX(block.x - block.width / 2), toY(block.z - block.depth / 2), block.width * scale, block.depth * scale);
 
     const lines = minimapPolylines();
-    lines.forEach((line, index) => {
-      ctx.strokeStyle = '#5d7a7d';
-      ctx.lineWidth = Math.max(2, ROADS[index].width * scale);
-      ctx.beginPath();
-      ctx.moveTo(toX(line[0].x), toY(line[0].z));
-      ctx.lineTo(toX(line[1].x), toY(line[1].z));
-      ctx.stroke();
-    });
+    for (const pass of [0, 1]) {
+      lines.forEach((line, index) => {
+        ctx.strokeStyle = pass === 0 ? '#d9c6a3' : '#f8edda';
+        ctx.lineWidth = Math.max(2, ROADS[index].width * scale) + (pass === 0 ? 2 : 0);
+        ctx.beginPath();
+        ctx.moveTo(toX(line[0].x), toY(line[0].z));
+        ctx.lineTo(toX(line[1].x), toY(line[1].z));
+        ctx.stroke();
+      });
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
+    for (const district of DISTRICTS) {
+      const x = toX((district.minX + district.maxX) / 2);
+      const y = toY((district.minZ + district.maxZ) / 2);
+      ctx.fillStyle = 'rgba(252,246,234,0.72)';
+      ctx.fillText(district.name.toUpperCase(), x + 1, y + 1);
+      ctx.fillStyle = '#5b4636';
+      ctx.fillText(district.name.toUpperCase(), x, y);
+    }
 
     const player = this.game.player.position;
     const target = this.game.missions?.markerPosition;
     if (target) {
-      const startRoad = nearestRoadPoint(player.x, player.z);
-      const endRoad = nearestRoadPoint(target.x, target.z);
-      ctx.strokeStyle = 'rgba(255, 122, 92, 0.9)';
-      ctx.lineWidth = 2.4;
-      ctx.setLineDash([9, 6]);
+      ctx.strokeStyle = 'rgba(208,76,58,0.9)';
+      ctx.lineWidth = 2.2;
+      ctx.setLineDash([8, 5]);
       ctx.beginPath();
       ctx.moveTo(toX(player.x), toY(player.z));
-      if (startRoad) ctx.lineTo(toX(startRoad.x), toY(startRoad.z));
-      if (endRoad) ctx.lineTo(toX(endRoad.x), toY(endRoad.z));
       ctx.lineTo(toX(target.x), toY(target.z));
       ctx.stroke();
       ctx.setLineDash([]);
@@ -356,7 +478,7 @@ export class Menus {
     for (const marker of MARKERS) {
       const x = toX(marker.x);
       const y = toY(marker.z);
-      ctx.fillStyle = '#ff7a5c';
+      ctx.fillStyle = '#d94f3f';
       ctx.beginPath();
       ctx.moveTo(x, y - 6);
       ctx.lineTo(x + 6, y);
@@ -364,33 +486,33 @@ export class Menus {
       ctx.lineTo(x - 6, y);
       ctx.closePath();
       ctx.fill();
-      ctx.font = '7px "Segoe UI", Arial, sans-serif';
+      ctx.font = 'bold 7px "Segoe UI", Arial, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#f7ead3';
-      ctx.fillText(marker.label, x + 9, y + 3);
+      ctx.fillStyle = '#fdf6e8';
+      ctx.fillText(marker.label, x + 8, y + 3);
     }
 
     const garage = SPAWN_POINTS.garage;
-    ctx.fillStyle = '#69d3c1';
+    ctx.fillStyle = '#2f9a8c';
     ctx.fillRect(toX(garage.x) - 6, toY(garage.z) - 6, 12, 12);
-    ctx.fillStyle = '#082028';
+    ctx.fillStyle = '#f7f0dd';
     ctx.font = 'bold 9px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('G', toX(garage.x), toY(garage.z) + 3);
 
     for (const crab of this.game.economy?.crabs ?? CRAB_SPOTS) {
       if (crab.collected) continue;
-      ctx.fillStyle = '#ffcc79';
+      ctx.fillStyle = '#e8a51e';
       ctx.beginPath();
-      ctx.arc(toX(crab.x), toY(crab.z), 2.6, 0, Math.PI * 2);
+      ctx.arc(toX(crab.x), toY(crab.z), 2.8, 0, Math.PI * 2);
       ctx.fill();
     }
 
     for (const unit of this.game.police?.units ?? []) {
       if (unit.dead || !unit.position) continue;
-      ctx.fillStyle = '#ff4d52';
+      ctx.fillStyle = '#d94f52';
       ctx.beginPath();
-      ctx.arc(toX(unit.position.x), toY(unit.position.z), 3.8, 0, Math.PI * 2);
+      ctx.arc(toX(unit.position.x), toY(unit.position.z), 3.7, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -399,8 +521,8 @@ export class Menus {
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(-(player.viewYaw ?? 0));
-    ctx.fillStyle = '#9ff5e3';
-    ctx.strokeStyle = '#072029';
+    ctx.fillStyle = '#147f78';
+    ctx.strokeStyle = '#fbf3df';
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(0, 10);
