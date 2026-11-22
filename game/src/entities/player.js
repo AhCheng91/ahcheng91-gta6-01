@@ -24,57 +24,104 @@ function makeMuzzleFlash() {
   return sprite;
 }
 
+function makeTorsoGeometry(width = 0.42, height = 0.55, depth = 0.26) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i += 1) {
+    const t = (position.getY(i) + height / 2) / height;
+    const taper = 0.86 + 0.14 * t;
+    position.setX(i, position.getX(i) * taper);
+    position.setZ(i, position.getZ(i) * taper);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeEyes(material, y, z) {
+  const geometry = new THREE.PlaneGeometry(0.044, 0.032);
+  const merged = new THREE.BufferGeometry();
+  const positions = [];
+  const indices = [];
+  for (const side of [-1, 1]) {
+    const eye = geometry.clone();
+    eye.translate(side * 0.062, y, z);
+    const eyePosition = eye.attributes.position;
+    const offset = positions.length / 3;
+    for (let i = 0; i < eyePosition.count; i += 1) positions.push(eyePosition.getX(i), eyePosition.getY(i), eyePosition.getZ(i));
+    for (let i = 0; i < eye.index.count; i += 1) indices.push(eye.index.getX(i) + offset);
+  }
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  merged.setIndex(indices);
+  return new THREE.Mesh(merged, material);
+}
+
 function buildPedestrianMesh() {
   const group = new THREE.Group();
   group.name = 'Rafa Quintero';
   const skin = new THREE.MeshStandardMaterial({ color: '#c98761', roughness: 0.85 });
   const shirt = new THREE.MeshStandardMaterial({ color: '#2f8f8a', roughness: 0.9 });
+  const collar = new THREE.MeshStandardMaterial({ color: '#e9d5ae', roughness: 0.9 });
   const trousers = new THREE.MeshStandardMaterial({ color: '#33404f', roughness: 0.95 });
   const hair = new THREE.MeshStandardMaterial({ color: '#2b2424', roughness: 0.95 });
   const steel = new THREE.MeshStandardMaterial({ color: '#38434a', metalness: 0.5, roughness: 0.5 });
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#15100f' });
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.82, 0.38), shirt);
-  torso.position.y = 1.31;
-  torso.castShadow = true;
-  torso.receiveShadow = true;
-  group.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin);
-  head.position.y = 1.94;
-  head.castShadow = true;
-  head.receiveShadow = true;
-  group.add(head);
-  const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.4), hair);
-  fringe.position.y = 2.14;
-  group.add(fringe);
+  const addPart = (parent, geometry, material, x, y, z) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
 
-  const legs = [];
-  const arms = [];
-  for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.86, 0.28), trousers);
-    leg.position.set(side * 0.17, 0.45, 0);
-    leg.castShadow = true;
-    group.add(leg);
-    legs.push(leg);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.7, 0.22), skin);
-    arm.position.set(side * 0.43, 1.34, 0);
-    arm.castShadow = true;
-    group.add(arm);
-    arms.push(arm);
-  }
+  const torso = addPart(group, makeTorsoGeometry(), shirt, 0, 1.23, 0);
+  const torsoBand = addPart(group, new THREE.BoxGeometry(0.34, 0.1, 0.27), collar, 0, 0.99, 0);
+  const collarBand = addPart(group, new THREE.BoxGeometry(0.43, 0.08, 0.28), collar, 0, 1.48, 0);
+  addPart(group, new THREE.BoxGeometry(0.36, 0.18, 0.24), trousers, 0, 0.86, 0);
+  addPart(group, new THREE.BoxGeometry(0.09, 0.06, 0.09), skin, 0, 1.54, 0);
+  const head = addPart(group, new THREE.BoxGeometry(0.28, 0.3, 0.28), skin, 0, 1.71, 0);
+  addPart(group, new THREE.BoxGeometry(0.3, 0.1, 0.3), hair, 0, 1.88, -0.005);
+  addPart(group, new THREE.BoxGeometry(0.3, 0.16, 0.08), hair, 0, 1.8, -0.12);
+  const eyes = makeEyes(eyeMaterial, 1.72, 0.141);
+  group.add(eyes);
+
+  const makeLeg = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.11, 0.85, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.78, 0.15), trousers, 0, -0.39, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.1, 0.24), hair, 0, -0.76, 0.04);
+    group.add(pivot);
+    return pivot;
+  };
+  const makeArm = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.255, 1.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.1, 0.3, 0.11), shirt, 0, -0.15, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.085, 0.28, 0.095), skin, 0, -0.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.09, 0.09, 0.09), skin, 0, -0.6, 0);
+    group.add(pivot);
+    return pivot;
+  };
+
+  const legs = [makeLeg(-1), makeLeg(1)];
+  const arms = [makeArm(-1), makeArm(1)];
+
   const pistol = new THREE.Group();
   const slide = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.48), steel);
   pistol.add(slide);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.28, 0.14), steel);
   grip.position.set(0, -0.19, -0.16);
   pistol.add(grip);
-  pistol.position.set(0.46, 1.25, 0.5);
-  pistol.rotation.x = -0.08;
+  pistol.position.set(0, -0.6, 0.08);
+  pistol.rotation.x = 1.5;
   pistol.visible = false;
   const muzzleFlash = makeMuzzleFlash();
   muzzleFlash.position.set(0, 0, 0.34);
   pistol.add(muzzleFlash);
-  group.add(pistol);
-  return { group, legs, arms, torso, head, pistol, muzzleFlash };
+  arms[1].add(pistol);
+
+  return { group, legs, arms, torso, head, pistol, muzzleFlash, torsoBand, collarBand, eyes };
 }
 
 function shortestAngle(angle) {
@@ -122,6 +169,7 @@ export class Player {
     this.arms = model.arms;
     this.torso = model.torso;
     this.head = model.head;
+    this.torsoBaseY = model.torso.position.y;
     this.pistol = model.pistol;
     this.muzzleFlash = model.muzzleFlash;
     this.muzzleTimer = 0;
@@ -223,10 +271,12 @@ export class Player {
     this.contactShadow.position.y = 0.035 - this.position.y;
     this.contactShadow.material.opacity = 0.75 * Math.max(0.15, 1 - this.position.y * 0.3);
     this.stride += this.speed * dt * 2.3;
-    const swing = Math.sin(this.stride) * Math.min(0.7, this.speed * 0.12);
+    const phase = Math.sin(this.stride);
+    const legSwing = phase * Math.min(0.52, this.speed * 0.09);
+    const armSwing = phase * Math.min(0.436, this.speed * 0.075);
     if (this.aiming) {
-      this.legs[0].rotation.x = swing * 0.55;
-      this.legs[1].rotation.x = -swing * 0.55;
+      this.legs[0].rotation.x = legSwing * 0.55;
+      this.legs[1].rotation.x = -legSwing * 0.55;
       this.arms[0].rotation.x = -1.05;
       this.arms[0].rotation.z = 0.42;
       this.arms[1].rotation.x = -1.5 - this.recoil;
@@ -234,16 +284,17 @@ export class Player {
       this.torso.rotation.x = -0.07;
       this.pistol.visible = this.activeWeapon !== 'fists';
     } else {
-      this.legs[0].rotation.x = swing;
-      this.legs[1].rotation.x = -swing;
-      this.arms[0].rotation.x = -swing * 0.75;
+      this.legs[0].rotation.x = legSwing;
+      this.legs[1].rotation.x = -legSwing;
+      this.arms[0].rotation.x = -armSwing;
       this.arms[0].rotation.z = 0;
-      this.arms[1].rotation.x = swing * 0.75;
+      this.arms[1].rotation.x = armSwing;
       this.arms[1].rotation.z = 0;
       this.torso.rotation.x = 0;
       this.pistol.visible = false;
     }
-    this.torso.position.y = 1.31 + Math.abs(Math.sin(this.stride)) * Math.min(0.05, this.speed * 0.008);
+    const breathe = Math.sin(performance.now() * 0.0018) * 0.012;
+    this.torso.position.y = this.torsoBaseY + breathe + Math.abs(phase) * Math.min(0.04, this.speed * 0.006);
     const crouchScale = this.crouching ? 0.74 : 1;
     this.mesh.scale.y += (crouchScale - this.mesh.scale.y) * Math.min(1, dt * 9);
   }

@@ -12,28 +12,32 @@ function seededRandom(seed) {
 }
 
 const SKIN_COLORS = ['#c98c62', '#8f5f45', '#e0b18a', '#6e4936', '#d89c72', '#a86b50'];
-const SHIRT_COLORS = ['#d96c54', '#3d9b91', '#e7bd72', '#486b8d', '#b45c7d', '#e7dcc0', '#5c8b61', '#73588c'];
-const TROUSER_COLORS = ['#2f3d47', '#4c4a55', '#6c5847', '#374f50', '#5b4853'];
+const CIVILIAN_OUTFITS = [
+  { shirt: '#d96c54', pants: '#2f3d47' },
+  { shirt: '#3d9b91', pants: '#4c4a55' },
+  { shirt: '#e7bd72', pants: '#6c5847' },
+  { shirt: '#486b8d', pants: '#374f50' },
+  { shirt: '#b45c7d', pants: '#5b4853' },
+  { shirt: '#e7dcc0', pants: '#2b3138' },
+  { shirt: '#5c8b61', pants: '#3a3f4a' },
+  { shirt: '#73588c', pants: '#4a4038' },
+];
+const HAIRSTYLES = ['short', 'cap', 'long'];
 const HAIR_COLORS = ['#241d1c', '#3d2b22', '#111820', '#7a4c2e', '#b08a55'];
 const UMBRELLA_COLORS = ['#e8664f', '#4fb7aa', '#ebc76a', '#e4ded0', '#9b78ad'];
+const CAP_COLORS = ['#2f6088', '#c95f4c', '#e0c05a', '#ece4cf', '#3f7a62'];
 
-const BODY_GEOMETRY = new THREE.BoxGeometry(0.52, 0.74, 0.34);
-const HEAD_GEOMETRY = new THREE.BoxGeometry(0.32, 0.36, 0.32);
-const HAIR_GEOMETRY = new THREE.BoxGeometry(0.36, 0.14, 0.36);
-const LIMB_GEOMETRY = new THREE.BoxGeometry(0.16, 0.72, 0.19);
 const BAG_GEOMETRY = new THREE.BoxGeometry(0.34, 0.4, 0.14);
 const CANOPY_GEOMETRY = new THREE.ConeGeometry(0.85, 0.42, 8);
 const POLE_GEOMETRY = new THREE.CylinderGeometry(0.03, 0.03, 1.75, 5);
 
-function materialCache(colors) {
-  return colors.map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.88, flatShading: true }));
+const MATERIALS = new Map();
+function materialFor(color) {
+  if (!MATERIALS.has(color)) MATERIALS.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.88, flatShading: true }));
+  return MATERIALS.get(color);
 }
 
-const SKINS = materialCache(SKIN_COLORS);
-const SHIRTS = materialCache(SHIRT_COLORS);
-const TROUSERS = materialCache(TROUSER_COLORS);
-const HAIRS = materialCache(HAIR_COLORS);
-const UMBRELLAS = materialCache(UMBRELLA_COLORS);
+const UMBRELLAS = UMBRELLA_COLORS.map((color) => materialFor(color));
 const POLE_MATERIAL = new THREE.MeshStandardMaterial({ color: '#4d4b48', roughness: 0.6 });
 
 function choose(list, rand) {
@@ -42,6 +46,37 @@ function choose(list, rand) {
 
 function clamp(value, low, high) {
   return Math.max(low, Math.min(high, value));
+}
+
+function makeTorsoGeometry(width = 0.42, height = 0.55, depth = 0.26) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i += 1) {
+    const t = (position.getY(i) + height / 2) / height;
+    const taper = 0.86 + 0.14 * t;
+    position.setX(i, position.getX(i) * taper);
+    position.setZ(i, position.getZ(i) * taper);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeEyes(material, y, z) {
+  const geometry = new THREE.PlaneGeometry(0.044, 0.032);
+  const merged = new THREE.BufferGeometry();
+  const positions = [];
+  const indices = [];
+  for (const side of [-1, 1]) {
+    const eye = geometry.clone();
+    eye.translate(side * 0.062, y, z);
+    const eyePosition = eye.attributes.position;
+    const offset = positions.length / 3;
+    for (let i = 0; i < eyePosition.count; i += 1) positions.push(eyePosition.getX(i), eyePosition.getY(i), eyePosition.getZ(i));
+    for (let i = 0; i < eye.index.count; i += 1) indices.push(eye.index.getX(i) + offset);
+  }
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  merged.setIndex(indices);
+  return new THREE.Mesh(merged, material);
 }
 
 function sidewalkPoint(road, along, side) {
@@ -66,7 +101,7 @@ function nearestRoad(rand, near) {
 function addPart(group, geometry, material, x, y, z) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, y, z);
-  mesh.castShadow = false;
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
@@ -74,22 +109,60 @@ function addPart(group, geometry, material, x, y, z) {
 
 function buildPedestrianMesh(rand, accessory) {
   const group = new THREE.Group();
-  const skin = choose(SKINS, rand);
-  const shirt = choose(SHIRTS, rand);
-  const trousers = choose(TROUSERS, rand);
-  const hair = choose(HAIRS, rand);
-  const torso = addPart(group, BODY_GEOMETRY, shirt, 0, 1.32, 0);
-  const head = addPart(group, HEAD_GEOMETRY, skin, 0, 1.9, 0);
-  addPart(group, HAIR_GEOMETRY, hair, 0, 2.09, -0.01);
-  const legs = [
-    addPart(group, LIMB_GEOMETRY, trousers, -0.15, 0.4, 0),
-    addPart(group, LIMB_GEOMETRY, trousers, 0.15, 0.4, 0),
-  ];
-  const arms = [
-    addPart(group, LIMB_GEOMETRY, skin, -0.37, 1.32, 0),
-    addPart(group, LIMB_GEOMETRY, skin, 0.37, 1.32, 0),
-  ];
-  for (const part of [torso, head, ...legs, ...arms]) part.castShadow = true;
+  const outfit = choose(CIVILIAN_OUTFITS, rand);
+  const skin = materialFor(choose(SKIN_COLORS, rand));
+  const shirt = materialFor(outfit.shirt);
+  const pants = materialFor(outfit.pants);
+  const hairColor = choose(HAIR_COLORS, rand);
+  const hair = materialFor(hairColor);
+  const collar = materialFor(rand() < 0.5 ? '#efe4cc' : outfit.shirt);
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#171211' });
+
+  const torso = addPart(group, makeTorsoGeometry(), shirt, 0, 1.23, 0);
+  addPart(group, new THREE.BoxGeometry(0.35, 0.1, 0.27), collar, 0, 0.99, 0);
+  addPart(group, new THREE.BoxGeometry(0.43, 0.08, 0.28), collar, 0, 1.48, 0);
+  addPart(group, new THREE.BoxGeometry(0.36, 0.18, 0.24), pants, 0, 0.86, 0);
+  addPart(group, new THREE.BoxGeometry(0.09, 0.06, 0.09), skin, 0, 1.54, 0);
+  const head = addPart(group, new THREE.BoxGeometry(0.28, 0.3, 0.28), skin, 0, 1.71, 0);
+
+  const hairstyle = choose(HAIRSTYLES, rand);
+  const hairParts = [];
+  if (hairstyle === 'cap') {
+    const capColor = materialFor(choose(CAP_COLORS, rand));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.3, 0.1, 0.3), capColor, 0, 1.89, 0));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.31, 0.035, 0.14), capColor, 0, 1.85, 0.15));
+  } else if (hairstyle === 'long') {
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.3, 0.14, 0.3), hair, 0, 1.88, -0.01));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.3, 0.24, 0.08), hair, 0, 1.79, -0.12));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.07, 0.18, 0.28), hair, -0.15, 1.74, -0.01));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.07, 0.18, 0.28), hair, 0.15, 1.74, -0.01));
+  } else {
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.3, 0.1, 0.3), hair, 0, 1.89, -0.005));
+    hairParts.push(addPart(group, new THREE.BoxGeometry(0.3, 0.14, 0.07), hair, 0, 1.82, -0.12));
+  }
+  const eyes = makeEyes(eyeMaterial, 1.72, 0.141);
+  group.add(eyes);
+
+  const makeLeg = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.11, 0.85, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.78, 0.15), pants, 0, -0.39, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.1, 0.24), hair, 0, -0.76, 0.04);
+    group.add(pivot);
+    return pivot;
+  };
+  const makeArm = (side) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.255, 1.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.1, 0.3, 0.11), shirt, 0, -0.15, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.085, 0.28, 0.095), skin, 0, -0.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.09, 0.09, 0.09), skin, 0, -0.6, 0);
+    group.add(pivot);
+    return pivot;
+  };
+
+  const legs = [makeLeg(-1), makeLeg(1)];
+  const arms = [makeArm(-1), makeArm(1)];
 
   let canopy = null;
   if (accessory === 'umbrella') {
@@ -99,13 +172,14 @@ function buildPedestrianMesh(rand, accessory) {
     cloth.scale.set(1.1, 1, 1.1);
     group.add(canopy);
   } else if (accessory === 'bags') {
-    addPart(group, BAG_GEOMETRY, choose(SHIRTS, rand), -0.5, 0.84, 0.06);
-    addPart(group, BAG_GEOMETRY, choose(SHIRTS, rand), 0.5, 0.84, 0.06);
+    addPart(group, BAG_GEOMETRY, materialFor(choose(CIVILIAN_OUTFITS, rand).shirt), -0.5, 0.84, 0.06);
+    addPart(group, BAG_GEOMETRY, materialFor(choose(CIVILIAN_OUTFITS, rand).shirt), 0.5, 0.84, 0.06);
   } else if (accessory === 'hat') {
-    addPart(group, new THREE.CylinderGeometry(0.34, 0.34, 0.08, 8), choose(SHIRTS, rand), 0, 2.12, 0);
+    addPart(group, new THREE.CylinderGeometry(0.34, 0.34, 0.08, 8), materialFor(choose(CAP_COLORS, rand)), 0, 1.94, 0);
   }
   group.name = 'Pedestrian';
-  return { group, torso, head, legs, arms, canopy };
+  const detail = [...arms, eyes, ...hairParts];
+  return { group, torso, head, legs, arms, canopy, eyes, detail, torsoBaseY: torso.position.y };
 }
 
 export class PedestrianSystem {
@@ -269,7 +343,12 @@ export class PedestrianSystem {
         this.placePed(ped, playerPosition, 35 + this.rand() * 85);
         continue;
       }
-      ped.group.visible = true;
+      const detailVisible = fromPlayer < 60;
+      if (ped.group.userData.detailVisible !== detailVisible) {
+        for (const part of ped.detail) part.visible = detailVisible;
+        ped.group.userData.detailVisible = detailVisible;
+      }
+      ped.group.visible = fromPlayer < 190;
 
       if (ped.mode === 'panic') {
         ped.timer -= dt;
@@ -321,17 +400,20 @@ export class PedestrianSystem {
       ped.group.position.copy(ped.position);
       ped.group.rotation.y = ped.heading;
       ped.stride += ped.speed * dt * 3.1;
-      const swing = Math.sin(ped.stride) * Math.min(0.72, ped.speed * 0.28);
-      ped.legs[0].rotation.x = swing;
-      ped.legs[1].rotation.x = -swing;
+      const phase = Math.sin(ped.stride);
+      const legSwing = phase * Math.min(0.52, ped.speed * 0.14);
+      const armSwing = phase * Math.min(0.436, ped.speed * 0.12);
+      ped.legs[0].rotation.x = legSwing;
+      ped.legs[1].rotation.x = -legSwing;
       if (ped.mode === 'panic') {
         ped.arms[0].rotation.x = -2.2 + Math.sin(ped.stride * 1.5) * 0.2;
         ped.arms[1].rotation.x = -2.2 - Math.sin(ped.stride * 1.5) * 0.2;
       } else {
-        ped.arms[0].rotation.x = -swing * 0.8;
-        ped.arms[1].rotation.x = swing * 0.8;
+        ped.arms[0].rotation.x = -armSwing;
+        ped.arms[1].rotation.x = armSwing;
       }
-      ped.torso.rotation.z = Math.sin(ped.stride) * 0.04;
+      ped.torso.rotation.z = phase * 0.04;
+      ped.torso.position.y = ped.torsoBaseY + Math.sin(this.time * 1.8 + ped.stride) * 0.012;
       if (ped.canopy) ped.canopy.rotation.z = Math.sin(this.time * 1.4 + ped.stride) * 0.06;
       ped.screamDelay = Math.max(0, ped.screamDelay - dt);
     }

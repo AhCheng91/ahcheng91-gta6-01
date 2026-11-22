@@ -8,28 +8,103 @@ import { nearestRoadPoint, randomRoute } from '../world/roadNetwork.js';
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function angleDiff(a, b) { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
 
+function makeTorsoGeometry(width = 0.42, height = 0.55, depth = 0.26) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i += 1) {
+    const t = (position.getY(i) + height / 2) / height;
+    const taper = 0.86 + 0.14 * t;
+    position.setX(i, position.getX(i) * taper);
+    position.setZ(i, position.getZ(i) * taper);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeOfficerEyes(material, y, z) {
+  const geometry = new THREE.PlaneGeometry(0.044, 0.032);
+  const positions = [];
+  const indices = [];
+  for (const side of [-1, 1]) {
+    const eye = geometry.clone();
+    eye.translate(side * 0.062, y, z);
+    const eyePosition = eye.attributes.position;
+    const offset = positions.length / 3;
+    for (let i = 0; i < eyePosition.count; i += 1) positions.push(eyePosition.getX(i), eyePosition.getY(i), eyePosition.getZ(i));
+    for (let i = 0; i < eye.index.count; i += 1) indices.push(eye.index.getX(i) + offset);
+  }
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  merged.setIndex(indices);
+  return new THREE.Mesh(merged, material);
+}
+
 function makeOfficerMesh() {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#31495d', roughness: 0.85 });
+  const navy = new THREE.MeshStandardMaterial({ color: '#2c4160', roughness: 0.86 });
+  const navyDark = new THREE.MeshStandardMaterial({ color: '#1d2b3d', roughness: 0.9 });
   const skin = new THREE.MeshStandardMaterial({ color: '#c58d68', roughness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: '#1d2833', roughness: 0.9 });
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.32), bodyMat);
-  torso.position.y = 1.25; g.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.32), skin);
-  head.position.y = 1.82; g.add(head);
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.4), dark);
-  cap.position.y = 2.03; g.add(cap);
+  const dark = new THREE.MeshStandardMaterial({ color: '#161d26', roughness: 0.9 });
+  const white = new THREE.MeshStandardMaterial({ color: '#eceade', roughness: 0.8 });
+  const hiVis = new THREE.MeshStandardMaterial({ color: '#d7e24a', roughness: 0.7 });
+  const steel = new THREE.MeshStandardMaterial({ color: '#3a4448', metalness: 0.5, roughness: 0.4 });
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#15100f' });
+
+  const addPart = (parent, geometry, material, x, y, z) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+
+  addPart(g, makeTorsoGeometry(), navy, 0, 1.23, 0);
+  addPart(g, new THREE.BoxGeometry(0.35, 0.1, 0.27), navyDark, 0, 0.99, 0);
+  addPart(g, new THREE.BoxGeometry(0.43, 0.08, 0.28), dark, 0, 1.48, 0);
+  addPart(g, new THREE.BoxGeometry(0.44, 0.075, 0.285), hiVis, 0, 1.16, 0);
+  addPart(g, new THREE.BoxGeometry(0.44, 0.075, 0.285), hiVis, 0, 1.31, 0);
+  addPart(g, new THREE.BoxGeometry(0.36, 0.18, 0.24), navyDark, 0, 0.86, 0);
+  addPart(g, new THREE.BoxGeometry(0.09, 0.06, 0.09), skin, 0, 1.54, 0);
+  addPart(g, new THREE.BoxGeometry(0.28, 0.3, 0.28), skin, 0, 1.71, 0);
+  addPart(g, new THREE.BoxGeometry(0.3, 0.09, 0.3), dark, 0, 1.89, -0.005);
+  addPart(g, new THREE.BoxGeometry(0.31, 0.045, 0.31), white, 0, 1.855, -0.005);
+  addPart(g, new THREE.BoxGeometry(0.31, 0.03, 0.15), dark, 0, 1.845, 0.15);
+  g.add(makeOfficerEyes(eyeMaterial, 1.72, 0.141));
+
   const legs = [];
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.75, 0.24), dark);
-    leg.position.set(s * 0.14, 0.38, 0); g.add(leg); legs.push(leg);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.18), bodyMat);
-    arm.position.set(s * 0.36, 1.25, 0); g.add(arm);
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.11, 0.85, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.78, 0.15), navyDark, 0, -0.39, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.13, 0.1, 0.24), dark, 0, -0.76, 0.04);
+    g.add(pivot);
+    legs.push(pivot);
   }
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.28), new THREE.MeshStandardMaterial({ color: '#3a4448', metalness: 0.5, roughness: 0.4 }));
-  gun.position.set(0.32, 1.15, 0.35); g.add(gun);
+  const arms = [];
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.255, 1.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.1, 0.3, 0.11), navy, 0, -0.15, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.085, 0.28, 0.095), skin, 0, -0.44, 0);
+    addPart(pivot, new THREE.BoxGeometry(0.09, 0.09, 0.09), skin, 0, -0.6, 0);
+    g.add(pivot);
+    arms.push(pivot);
+  }
+
+  const gun = new THREE.Group();
+  const slide = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.34), steel);
+  gun.add(slide);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.1), steel);
+  grip.position.set(0, -0.13, -0.1);
+  gun.add(grip);
+  gun.position.set(0, -0.58, 0.08);
+  gun.rotation.x = 1.5;
+  arms[1].add(gun);
+
   g.userData.legs = legs;
-  g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  g.userData.arms = arms;
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
 }
 
