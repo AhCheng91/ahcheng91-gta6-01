@@ -57,10 +57,14 @@ function lockCamera(game, blended, shotSpeed = null, cameraOpts = null) {
 async function stageChase(game) {
   game.timeOfDay = 17.8;
   game.engine.setTimeOfDay(game.timeOfDay);
+  restoreFollowCamera(game);
+
   const hero = game.heroVehicle;
+  const heading = Math.PI / 2;
+  const heroPos = new THREE.Vector3(116, 0, -22);
   if (hero) {
-    hero.position.set(-40, 0, -22);
-    hero.heading = Math.PI / 2;
+    hero.position.copy(heroPos);
+    hero.heading = heading;
     hero.speed = 22;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
@@ -68,6 +72,7 @@ async function stageChase(game) {
     game.player.mesh.visible = false;
     game.player.position.copy(hero.position);
   }
+
   game.player.giveWeapon('pistol');
   game.player.giveWeapon('smg');
   game.player.giveWeapon('shotgun');
@@ -75,18 +80,66 @@ async function stageChase(game) {
   game.player.activeWeapon = 'smg';
   game.wanted.setStars(3, game.player.position);
   game.police.dispatch(3, game.player.position);
-  // place police behind and ahead
-  const units = game.police.units.filter((u) => u.kind === 'CRUISER');
-  if (units[0]?.vehicle) { units[0].vehicle.position.set(-70, 0, -22); units[0].vehicle.heading = Math.PI / 2; units[0].vehicle.speed = 24; }
-  if (units[1]?.vehicle) { units[1].vehicle.position.set(-85, 0, -19); units[1].vehicle.heading = Math.PI / 2; units[1].vehicle.speed = 23; }
-  if (units[2]?.vehicle) { units[2].vehicle.position.set(20, 0, -22); units[2].vehicle.heading = -Math.PI / 2; units[2].vehicle.speed = 5; units[2].tactic = 'ROADBLOCK'; }
-  if (units[3]?.vehicle) { units[3].vehicle.position.set(-60, 0, -25); units[3].vehicle.heading = Math.PI / 2; units[3].vehicle.speed = 24; }
   game.police.ensureHelicopter(game.player.position);
+
+  const cruisers = game.police.units.filter((u) => u.kind === 'CRUISER' && u.vehicle);
+  const cruiserSpots = [
+    { x: heroPos.x - 8, z: -19.5, heading, speed: 24 },
+    { x: heroPos.x - 10, z: -24.5, heading, speed: 23 },
+  ];
+  cruisers.forEach((unit, index) => {
+    const spot = cruiserSpots[index];
+    const vehicle = unit.vehicle;
+    if (!vehicle) return;
+    if (spot) {
+      vehicle.position.set(spot.x, 0, spot.z);
+      vehicle.heading = spot.heading;
+      vehicle.speed = spot.speed;
+      vehicle.mesh.position.copy(vehicle.position);
+      vehicle.mesh.rotation.y = vehicle.heading;
+      if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
+      unit.position = vehicle.position;
+      unit.tactic = 'CHASE';
+    } else {
+      vehicle.position.set(400, 0, 400);
+      vehicle.speed = 0;
+      vehicle.mesh.position.copy(vehicle.position);
+      unit.tactic = 'STANDBY';
+    }
+  });
+
+  const heli = game.police.units.find((u) => u.kind === 'HELICOPTER' && !u.dead);
+  if (heli) {
+    heli.radius = 18;
+    heli.angle = Math.PI * 0.15;
+    heli.mesh.position.set(heroPos.x - 6, 24, heroPos.z - 14);
+    heli.position = heli.mesh.position;
+    if (heli.spotlight) {
+      heli.spotlight.position.copy(heli.mesh.position);
+      heli.spotlight.target.position.set(heroPos.x + 6, 0.5, heroPos.z);
+      heli.spotlight.intensity = 40;
+    }
+    if (heli.spotlightCone) {
+      heli.spotlightCone.position.copy(heli.mesh.position);
+      heli.spotlightCone.lookAt(heroPos.x + 6, 0, heroPos.z);
+      heli.spotlightCone.rotateX(-Math.PI / 2);
+      heli.spotlightCone.material.opacity = 0.12;
+    }
+  }
+
   game.hud.setMission({ job: 'JOB 06 · CORONA TOWER JOB', stage: 'STAGE 3 / 4', stageIndex: 3, stageCount: 4, objective: 'Escape the Corona cordon', nextHint: 'REACH THE CAUSEWAY' });
   game.hud.say('LT. BRUNA OCHOA', 'All units, box him in on the Malecón!');
   game.hud.setRadio('PMPD SCANNER', 'DISPATCH 10-42');
   await settle(game, 60);
-  lockCamera(game, true, 22);
+
+  const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const left = new THREE.Vector3(-Math.cos(heading), 0, Math.sin(heading));
+  const cameraPos = heroPos.clone().addScaledVector(forward, -7).addScaledVector(left, 1.2).setY(1.7);
+  const lookAt = heroPos.clone().addScaledVector(forward, 4).setY(1.0);
+  game.shotSpeed = 22;
+  game.shotCamera = null;
+  lockCamera(game, true, 22, {});
+  pinCamera(game, cameraPos, lookAt);
   return true;
 }
 
