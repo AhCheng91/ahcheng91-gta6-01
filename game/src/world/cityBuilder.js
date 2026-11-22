@@ -32,7 +32,7 @@ function makeInstances(geometry, material, transforms, shadows = false, name = '
   for (let i = 0; i < transforms.length; i += 1) {
     const item = transforms[i];
     dummy.position.set(item.x, item.y, item.z);
-    dummy.rotation.set(item.rx ?? 0, item.ry ?? 0, item.rz ?? 0);
+    dummy.rotation.set(item.rx ?? 0, item.ry ?? 0, item.rz ?? 0, item.ro ?? 'XYZ');
     dummy.scale.set(item.sx ?? 1, item.sy ?? 1, item.sz ?? 1);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
@@ -341,9 +341,10 @@ export class CityBuilder {
       const { x, z, width, depth, height, style } = block;
       const palette = paletteFor(block, index);
       bodies.push({ ...box(x, height / 2, z, width, height, depth, palette.colour), label: palette.name });
-      const streetSide = z < 0 ? -1 : 1;
-      const streetFace = z + streetSide * depth / 2;
-      const outward = streetSide;
+      const nearestStreet = ROADS.filter((road) => road.axis === 'x')
+        .sort((a, b) => Math.abs(a.at - z) - Math.abs(b.at - z))[0];
+      const outward = nearestStreet && nearestStreet.at > z ? 1 : -1;
+      const streetFace = z + outward * depth / 2;
 
       shopGlass.push(box(x, 1.55, streetFace + outward * 0.16, width * 0.9, 2.65, 0.2, '#315661'));
       for (let mullion = -2; mullion <= 2; mullion += 1) {
@@ -399,14 +400,14 @@ export class CityBuilder {
       }
 
       if (style === 'malecon' || style === 'barrio' || style === 'playa') {
-        const awningZ = streetFace + outward * 1.15;
-        awnings.push(box(x, 3.3, awningZ, width * 0.8, 0.18, 2.0, outward < 0 ? '#e87555' : '#3b9b91'));
-        this.registerProp(`Awning ${block.id}`, x, awningZ, width * 0.4, 1.0, { kind: 'awning', attachedToFacade: true });
+        const awningZ = streetFace + outward * 1.05;
+        awnings.push(box(x, 3.3, awningZ, width * 0.8, 0.18, 2.1, outward < 0 ? '#e87555' : '#3b9b91'));
+        this.registerProp(`Awning ${block.id}`, x, awningZ, width * 0.4, 1.05, { kind: 'awning', attachedToFacade: true });
         if (random() < 0.7) {
           const neon = ['#ff8f6d', '#64d9c4', '#ffd36b', '#e98bd3'];
-          const signZ = streetFace + outward * 0.45;
-          signBoxes.push(box(x, 5.05, signZ, Math.min(width * 0.55, 9), 1.2, 0.4, neon[Math.floor(random() * neon.length)]));
-          this.registerProp(`Shop sign ${block.id}`, x, signZ, Math.min(width * 0.275, 4.5), 0.2, { kind: 'sign', attachedToFacade: true });
+          const signZ = streetFace + outward * 0.22;
+          signBoxes.push(box(x, 4.25, signZ, Math.min(width * 0.55, 9), 1.0, 0.44, neon[Math.floor(random() * neon.length)]));
+          this.registerProp(`Shop sign ${block.id}`, x, signZ, Math.min(width * 0.275, 4.5), 0.22, { kind: 'sign', attachedToFacade: true });
         }
       }
 
@@ -476,16 +477,17 @@ export class CityBuilder {
         });
       }
       const topX = position.x + lean * height;
-      crowns.push({ x: topX, y: height + 0.1, z: position.z, sx: 0.75, sy: 0.6, sz: 0.75, color: '#486f45' });
+      crowns.push({ x: topX, y: height + 0.02, z: position.z, sx: 0.75, sy: 0.6, sz: 0.75, color: '#486f45' });
       for (let i = 0; i < 7; i += 1) {
         const angle = i * Math.PI * 2 / 7 + this.random() * 0.2;
         fronds.push({
-          x: topX + Math.sin(angle) * 1.45,
-          y: height + 0.1,
-          z: position.z + Math.cos(angle) * 1.45,
+          x: topX,
+          y: height + 0.12,
+          z: position.z,
           sx: 0.42, sy: 1, sz: 0.16,
           rx: Math.PI / 2 + 0.32,
           ry: angle,
+          ro: 'YXZ',
           color: i % 2 ? '#3e8753' : '#57a35d',
         });
       }
@@ -494,14 +496,17 @@ export class CityBuilder {
     }
 
     const material = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, flatShading: true });
+    const frondGeometry = new THREE.ConeGeometry(1.25, 4.6, 3);
+    frondGeometry.translate(0, 2.3, 0);
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.7, 1, 1, 7), material, trunks, true, 'Palm trunks'));
     this.root.add(makeInstances(new THREE.IcosahedronGeometry(1, 0), material, crowns, true, 'Palm crowns'));
-    this.root.add(makeInstances(new THREE.ConeGeometry(1.25, 4.6, 3), material, fronds, true, 'Palm fronds'));
+    this.root.add(makeInstances(frondGeometry, material, fronds, true, 'Palm fronds'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), material, soil, false, 'Palm soil rings'));
   }
 
   buildStreetFurniture() {
     const poles = [];
+    const poleBases = [];
     const arms = [];
     const lamps = [];
     const benches = [];
@@ -509,6 +514,7 @@ export class CityBuilder {
     const hydrants = [];
     const umbrellas = [];
     const parasolPoles = [];
+    const parasolBases = [];
     const towels = [];
     const litter = [];
     const railing = [];
@@ -520,6 +526,7 @@ export class CityBuilder {
           const x = road.axis === 'x' ? distance : road.at + offset;
           const z = road.axis === 'x' ? road.at + offset : distance;
           poles.push({ x, y: 3.5, z, sx: 0.16, sy: 7, sz: 0.16, color: '#5b6b70' });
+          poleBases.push({ x, y: 0.09, z, sx: 0.75, sy: 0.18, sz: 0.75, color: '#9d8d73' });
           arms.push(box(x - (road.axis === 'x' ? 1.1 : 0), 6.95, z + (road.axis === 'x' ? 0 : -1.1), road.axis === 'x' ? 2.4 : 0.16, 0.14, road.axis === 'x' ? 0.16 : 2.4, '#5b6b70'));
           lamps.push(box(x - (road.axis === 'x' ? 2 : 0), 6.8, z + (road.axis === 'x' ? 0 : -2), 0.7, 0.22, 0.7, '#ffd9a0'));
           this.registerProp(`Street lamp ${x.toFixed(0)},${z.toFixed(0)}`, x, z, 0.3, 0.3, { kind: 'lamp' });
@@ -545,6 +552,7 @@ export class CityBuilder {
       const color = ['#ff8d72', '#66cfc0', '#ffd981', '#f3f0d7'][Math.floor(this.random() * 4)];
       umbrellas.push({ x, y: 2.5, z: -45, sx: 1, sy: 1, sz: 1, color });
       parasolPoles.push({ x, y: 1.3, z: -45, sx: 0.09, sy: 2.6, sz: 0.09, color: '#e8dfc8' });
+      parasolBases.push({ x, y: 0.08, z: -45, sx: 0.9, sy: 0.16, sz: 0.9, color: '#c2a982' });
       towels.push(box(x + 5, 0.08, -47.5, 2.7, 0.035, 1.7, color));
       this.registerProp(`Beach umbrella ${x}`, x, -45, 1.4, 1.4, { kind: 'umbrella' });
       this.registerProp(`Beach towel ${x}`, x + 5, -47.5, 1.4, 0.9, { kind: 'towel' });
@@ -564,6 +572,8 @@ export class CityBuilder {
     }
 
     const metal = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.75, metalness: 0.15 });
+    const earth = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
+    this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), earth, poleBases, false, 'Street lamp bases'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(1, 1, 1, 7), metal, poles, false, 'Street lamp poles'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), metal, arms, false, 'Street lamp arms'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: true }), lamps, false, 'Street lamp heads'));
@@ -571,6 +581,7 @@ export class CityBuilder {
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.6, 1, 8), metal, bins, false, 'Street bins'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 8), metal, hydrants, false, 'Fire hydrants'));
     this.root.add(makeInstances(new THREE.ConeGeometry(2.2, 1.2, 8), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, flatShading: true }), umbrellas, true, 'Beach umbrellas'));
+    this.root.add(makeInstances(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), earth, parasolBases, false, 'Beach umbrella bases'));
     this.root.add(makeInstances(new THREE.CylinderGeometry(1, 1, 1, 6), metal, parasolPoles, false, 'Beach umbrella poles'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 }), towels, false, 'Beach towels'));
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), metal, railing, false, 'Beach railing'));
