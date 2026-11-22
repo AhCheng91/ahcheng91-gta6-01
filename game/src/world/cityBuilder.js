@@ -740,10 +740,11 @@ export class CityBuilder {
       wake.rotation.x = -Math.PI / 2;
       wake.position.set(-11, -0.52, 0);
       boat.add(wake);
-      const baseX = i === 0 ? -158 : -18;
-      const baseZ = i === 0 ? -118 : -146;
+      const baseX = i === 0 ? -200 : -120;
+      const baseZ = i === 0 ? -82 : -95;
       boat.position.set(baseX, -1.1, baseZ);
       boat.rotation.y = i === 0 ? 0.3 : -0.2;
+      boat.scale.setScalar(1.35);
       this.sailboats.push({ group: boat, baseX, baseZ, phase: i * 2.3 });
       this.root.add(boat);
     }
@@ -894,8 +895,9 @@ export class CityBuilder {
       ], 3));
       const gull = new THREE.Line(geometry, gullMaterial);
       gull.name = 'Seagull';
-      gull.position.set(-226 + i * 13, 11 + (i % 3) * 2.5, -64 - (i % 4) * 11);
-      this.gulls.push({ line: gull, phase: i * 0.9, radius: 14 + i * 3, height: 10 + (i % 4) * 2.5, x: -224 + i * 13, z: -70 - (i % 3) * 12 });
+      gull.position.set(-218 + i * 11, 9 + (i % 3) * 2, -56 - (i % 4) * 8);
+      gull.scale.set(1.9, 1, 1.9);
+      this.gulls.push({ line: gull, phase: i * 0.9, radius: 10 + i * 2.5, height: 8 + (i % 4) * 2, x: -216 + i * 11, z: -60 - (i % 3) * 9 });
       this.root.add(gull);
     }
   }
@@ -944,7 +946,7 @@ export class CityBuilder {
     for (const gull of this.gulls) {
       const angle = time * 0.24 + gull.phase;
       gull.line.position.set(gull.x + Math.cos(angle) * gull.radius, gull.height + Math.sin(time * 1.4 + gull.phase) * 1.3, gull.z + Math.sin(angle) * gull.radius);
-      gull.line.rotation.y = -angle + Math.PI * 0.5;
+      gull.line.quaternion.copy(this.engine.camera.quaternion);
       gull.line.scale.y = 1 + Math.sin(time * 5.2 + gull.phase) * 0.35;
     }
     for (const boat of this.sailboats) {
