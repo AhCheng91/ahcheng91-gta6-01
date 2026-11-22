@@ -163,14 +163,14 @@ export class Engine {
     this.sun.name = 'Golden hour key light';
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -85;
-    this.sun.shadow.camera.right = 85;
-    this.sun.shadow.camera.top = 85;
-    this.sun.shadow.camera.bottom = -85;
+    this.sun.shadow.camera.left = -70;
+    this.sun.shadow.camera.right = 70;
+    this.sun.shadow.camera.top = 70;
+    this.sun.shadow.camera.bottom = -70;
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 420;
-    this.sun.shadow.bias = -0.00045;
-    this.sun.shadow.normalBias = 0.022;
+    this.sun.shadow.camera.far = 400;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 

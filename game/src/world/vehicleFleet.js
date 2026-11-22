@@ -22,6 +22,7 @@ function addBox(group, width, height, depth, x, y, z, material, castShadow = tru
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y, z);
   mesh.castShadow = castShadow;
+  mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
 }
@@ -32,9 +33,12 @@ function addWheel(group, x, y, z, radius) {
   const rubber = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 0.28, 12), new THREE.MeshStandardMaterial({ color: '#1b2024', roughness: 0.95 }));
   rubber.rotation.z = Math.PI / 2;
   rubber.castShadow = true;
+  rubber.receiveShadow = true;
   pivot.add(rubber);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.5, radius * 0.5, 0.3, 10), new THREE.MeshStandardMaterial({ color: '#9aa5a4', metalness: 0.6, roughness: 0.4 }));
   hub.rotation.z = Math.PI / 2;
+  hub.castShadow = true;
+  hub.receiveShadow = true;
   pivot.add(hub);
   group.add(pivot);
   return pivot;

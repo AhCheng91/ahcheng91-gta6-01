@@ -67,7 +67,7 @@ function addPart(group, geometry, material, x, y, z) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, y, z);
   mesh.castShadow = false;
-  mesh.receiveShadow = false;
+  mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
 }

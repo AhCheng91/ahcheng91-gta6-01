@@ -16,10 +16,12 @@ function buildPedestrianMesh() {
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.82, 0.38), shirt);
   torso.position.y = 1.31;
   torso.castShadow = true;
+  torso.receiveShadow = true;
   group.add(torso);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.36), skin);
   head.position.y = 1.94;
   head.castShadow = true;
+  head.receiveShadow = true;
   group.add(head);
   const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.4), hair);
   fringe.position.y = 2.14;
