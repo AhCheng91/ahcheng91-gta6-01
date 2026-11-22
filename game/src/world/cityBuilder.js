@@ -66,39 +66,26 @@ function roadSegments(road) {
   return segments;
 }
 
-const SEA_VERTEX = `
-  varying vec2 vWorld;
-  void main() {
-    vec4 world = modelMatrix * vec4(position, 1.0);
-    vWorld = world.xz;
-    gl_Position = projectionMatrix * viewMatrix * world;
-  }
-`;
-
-const SEA_FRAGMENT = `
-  uniform float time;
-  uniform vec3 deep;
-  uniform vec3 swell;
-  uniform vec3 glint;
-  uniform vec3 fogColor;
-  uniform vec2 sunAzimuth;
-  uniform vec2 eye;
-  varying vec2 vWorld;
-  void main() {
-    float bandA = sin(vWorld.y * 0.085 + time * 0.55 + sin(vWorld.x * 0.021) * 1.8) * 0.5 + 0.5;
-    float bandB = sin(vWorld.y * 0.21 - time * 0.72 + vWorld.x * 0.013) * 0.5 + 0.5;
-    vec3 color = mix(deep, swell, bandA * 0.34 + bandB * 0.14);
-    float along = dot(vWorld, sunAzimuth);
-    float across = dot(vWorld, vec2(-sunAzimuth.y, sunAzimuth.x));
-    float path = exp(-across * across / 2600.0) * (0.45 + 0.55 * bandB);
-    color += glint * path * 0.55;
-    float distanceToEye = length(vWorld - eye);
-    float fog = smoothstep(240.0, 1150.0, distanceToEye);
-    gl_FragColor = vec4(mix(color, fogColor, fog), 1.0);
-    #include <tonemapping_fragment>
-    #include <encodings_fragment>
-  }
-`;
+function makeGlintTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  const vertical = context.createLinearGradient(0, 0, 0, 256);
+  vertical.addColorStop(0, 'rgba(255, 250, 230, 0.92)');
+  vertical.addColorStop(0.3, 'rgba(255, 226, 168, 0.55)');
+  vertical.addColorStop(1, 'rgba(255, 190, 130, 0)');
+  context.fillStyle = vertical;
+  context.fillRect(0, 0, 64, 256);
+  const across = context.createLinearGradient(0, 0, 64, 0);
+  across.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  across.addColorStop(0.5, 'rgba(255, 255, 255, 1)');
+  across.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  context.globalCompositeOperation = 'destination-in';
+  context.fillStyle = across;
+  context.fillRect(0, 0, 64, 256);
+  return new THREE.CanvasTexture(canvas);
+}
 
 export class CityBuilder {
   constructor(engine) {
@@ -178,25 +165,55 @@ export class CityBuilder {
   buildSea() {
     this.seaUniforms = {
       time: { value: 0 },
-      deep: { value: new THREE.Color('#1f7383') },
-      swell: { value: new THREE.Color('#48a9a4') },
-      glint: { value: new THREE.Color('#ffd9a0') },
-      fogColor: { value: this.scene.fog.color.clone() },
       sunAzimuth: { value: new THREE.Vector2(-0.7, -0.71) },
       eye: { value: new THREE.Vector2() },
     };
-    const sea = new THREE.Mesh(
-      new THREE.PlaneGeometry(4200, 3100, 48, 48),
-      new THREE.ShaderMaterial({
-        uniforms: this.seaUniforms,
-        vertexShader: SEA_VERTEX,
-        fragmentShader: SEA_FRAGMENT,
-      }),
-    );
+    const seaMaterial = new THREE.MeshStandardMaterial({
+      color: '#2b8b93', roughness: 0.15, metalness: 0.1,
+    });
+    seaMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.time = this.seaUniforms.time;
+      shader.uniforms.sunAzimuth = this.seaUniforms.sunAzimuth;
+      shader.uniforms.eye = this.seaUniforms.eye;
+      shader.vertexShader = `uniform float time;\nvarying vec2 vSeaWorld;\n${shader.vertexShader}`.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec4 seaWorld = modelMatrix * vec4(position, 1.0);
+        vSeaWorld = seaWorld.xz;
+        transformed.z += sin(seaWorld.x * 0.07 + time * 0.65 + sin(seaWorld.z * 0.025) * 1.6) * 0.22
+          + sin(seaWorld.z * 0.14 - time * 0.9) * 0.09;`,
+      );
+      shader.fragmentShader = `uniform float time;\nuniform vec2 sunAzimuth;\nuniform vec2 eye;\nvarying vec2 vSeaWorld;\n${shader.fragmentShader}`.replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float bandA = sin(vSeaWorld.y * 0.085 + time * 0.55 + sin(vSeaWorld.x * 0.021) * 1.8) * 0.5 + 0.5;
+        float bandB = sin(vSeaWorld.y * 0.21 - time * 0.72 + vSeaWorld.x * 0.013) * 0.5 + 0.5;
+        diffuseColor.rgb *= 0.74 + bandA * 0.19 + bandB * 0.08;
+        float along = dot(vSeaWorld, sunAzimuth);
+        float across = dot(vSeaWorld, vec2(-sunAzimuth.y, sunAzimuth.x));
+        float path = exp(-across * across / 2400.0) * (0.4 + 0.6 * bandB);
+        float reach = 1.0 - smoothstep(0.0, 900.0, abs(along - dot(eye, sunAzimuth)));
+        diffuseColor.rgb += vec3(0.34, 0.23, 0.12) * path * reach;`,
+      );
+    };
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(4200, 3100, 64, 64), seaMaterial);
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(0, -0.65, -1600);
     sea.name = 'Teal sea with swell and sun glint';
     this.root.add(sea);
+
+    this.sunPath = new THREE.Mesh(
+      new THREE.PlaneGeometry(110, 900),
+      new THREE.MeshBasicMaterial({
+        map: makeGlintTexture(), transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0, fog: false, toneMapped: false,
+      }),
+    );
+    this.sunPath.rotation.x = -Math.PI / 2;
+    this.sunPath.position.y = -0.57;
+    this.sunPath.renderOrder = 2;
+    this.sunPath.name = 'Sun glint path';
+    this.root.add(this.sunPath);
 
     this.addPlane(0, -56, 900, 12, '#cfe6d8', -0.55, false, 'Shore foam');
     this.addPlane(0, -51, 740, 1.4, '#f4e6c4', 0.06, false, 'Beach edge');
@@ -205,7 +222,7 @@ export class CityBuilder {
     const waves = [];
     for (let i = 0; i < 190; i += 1) {
       waves.push(box(-1200 + this.random() * 2400, -0.5, -70 - this.random() * 1100,
-        18 + this.random() * 70, 0.02, 0.4 + this.random() * 1.2, '#8fd8ca'));
+        18 + this.random() * 70, 0.02, 0.4 + this.random() * 1.2, '#16525c'));
     }
     const mesh = makeInstances(new THREE.BoxGeometry(1, 1, 1), waveMaterial, waves, false, 'Swell bands');
     this.waterLines.push(mesh);
@@ -729,10 +746,13 @@ export class CityBuilder {
     for (const line of this.waterLines) line.material.opacity = 0.22 + Math.sin(time * 0.8) * 0.05;
     if (this.seaUniforms) {
       this.seaUniforms.time.value = time;
-      this.seaUniforms.fogColor.value.copy(this.scene.fog.color);
       this.seaUniforms.eye.value.set(this.engine.camera.position.x, this.engine.camera.position.z);
       const sun = this.engine.sunDirection;
-      this.seaUniforms.sunAzimuth.value.set(sun.x, sun.z).normalize();
+      const azimuth = this.seaUniforms.sunAzimuth.value.set(sun.x, sun.z).normalize();
+      this.sunPath.rotation.z = Math.atan2(-azimuth.x, -azimuth.y);
+      this.sunPath.position.x = this.engine.camera.position.x + azimuth.x * 380;
+      this.sunPath.position.z = this.engine.camera.position.z + azimuth.y * 380;
+      this.sunPath.material.opacity = THREE.MathUtils.smoothstep(sun.y, -0.04, 0.3) * 0.6;
     }
     for (const trolley of this.craneTrolleys) {
       trolley.group.position.x = trolley.origin + Math.sin(time * 0.16 + trolley.phase) * 22;

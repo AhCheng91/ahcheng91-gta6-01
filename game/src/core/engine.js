@@ -127,7 +127,7 @@ export class Engine {
     if ('outputColorSpace' in this.renderer && THREE.SRGBColorSpace) this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     else if (THREE.sRGBEncoding !== undefined) this.renderer.outputEncoding = THREE.sRGBEncoding;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.02;
+    this.renderer.toneMappingExposure = 0.98;
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog('#e7b99e', 240, 1150);
