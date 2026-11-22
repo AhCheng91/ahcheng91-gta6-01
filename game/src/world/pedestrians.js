@@ -119,10 +119,10 @@ function buildPedestrianMesh(rand, accessory) {
   const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#171211' });
 
   const torso = addPart(group, makeTorsoGeometry(), shirt, 0, 1.23, 0);
-  addPart(group, new THREE.BoxGeometry(0.35, 0.1, 0.27), collar, 0, 0.99, 0);
-  addPart(group, new THREE.BoxGeometry(0.43, 0.08, 0.28), collar, 0, 1.48, 0);
-  addPart(group, new THREE.BoxGeometry(0.36, 0.18, 0.24), pants, 0, 0.86, 0);
-  addPart(group, new THREE.BoxGeometry(0.09, 0.06, 0.09), skin, 0, 1.54, 0);
+  const lowerBand = addPart(group, new THREE.BoxGeometry(0.35, 0.1, 0.27), collar, 0, 0.99, 0);
+  const collarBand = addPart(group, new THREE.BoxGeometry(0.43, 0.08, 0.28), collar, 0, 1.48, 0);
+  const hips = addPart(group, new THREE.BoxGeometry(0.36, 0.18, 0.24), pants, 0, 0.86, 0);
+  const neck = addPart(group, new THREE.BoxGeometry(0.09, 0.06, 0.09), skin, 0, 1.54, 0);
   const head = addPart(group, new THREE.BoxGeometry(0.28, 0.3, 0.28), skin, 0, 1.71, 0);
 
   const hairstyle = choose(HAIRSTYLES, rand);
@@ -178,7 +178,7 @@ function buildPedestrianMesh(rand, accessory) {
     addPart(group, new THREE.CylinderGeometry(0.34, 0.34, 0.08, 8), materialFor(choose(CAP_COLORS, rand)), 0, 1.94, 0);
   }
   group.name = 'Pedestrian';
-  const detail = [...arms, eyes, ...hairParts];
+  const detail = [...arms, eyes, ...hairParts, lowerBand, collarBand, hips, neck];
   return { group, torso, head, legs, arms, canopy, eyes, detail, torsoBaseY: torso.position.y };
 }
 
@@ -192,7 +192,8 @@ export class PedestrianSystem {
   }
 
   populate(count = 78, center = { x: -30, z: -22 }) {
-    for (let i = 0; i < count; i += 1) {
+    const population = Math.min(count, 18);
+    for (let i = 0; i < population; i += 1) {
       const accessory = i % 11 === 0 ? 'umbrella' : i % 7 === 0 ? 'bags' : i % 13 === 0 ? 'hat' : 'none';
       const ped = this.createPed(accessory);
       this.placePed(ped, center, 15 + this.rand() * 92);
@@ -343,12 +344,17 @@ export class PedestrianSystem {
         this.placePed(ped, playerPosition, 35 + this.rand() * 85);
         continue;
       }
-      const detailVisible = fromPlayer < 60;
+      const detailVisible = fromPlayer < 22;
       if (ped.group.userData.detailVisible !== detailVisible) {
         for (const part of ped.detail) part.visible = detailVisible;
         ped.group.userData.detailVisible = detailVisible;
       }
-      ped.group.visible = fromPlayer < 190;
+      const legsVisible = fromPlayer < 72;
+      if (ped.group.userData.legsVisible !== legsVisible) {
+        for (const leg of ped.legs) leg.visible = legsVisible;
+        ped.group.userData.legsVisible = legsVisible;
+      }
+      ped.group.visible = fromPlayer < 120;
 
       if (ped.mode === 'panic') {
         ped.timer -= dt;

@@ -57,11 +57,13 @@ export class TrafficSystem {
     this.vehicles = [];
     this.moving = [];
     this.parked = [];
+    this.bus = null;
     this.time = 0;
   }
 
   populate(movingCount = 44) {
-    for (const lot of PARKING_LOTS) {
+    const lots = PARKING_LOTS.filter((lot, index) => lot.hero || index % 2 === 0);
+    for (const lot of lots) {
       const vehicle = this.createCar({
         type: lot.type,
         x: lot.x,
@@ -75,19 +77,107 @@ export class TrafficSystem {
       this.parked.push(vehicle);
     }
     const center = SPAWN_POINTS.onFoot;
-    for (let i = 0; i < movingCount; i += 1) {
+    const fleetSize = Math.min(movingCount, 10);
+    for (let i = 0; i < fleetSize; i += 1) {
       const type = TRAFFIC_TYPES[Math.floor(this.rand() * TRAFFIC_TYPES.length)];
       const vehicle = this.createCar({ type, x: center.x, z: center.z });
       this.resetMoving(vehicle, center, 25 + i * 3.2, 165);
       this.moving.push(vehicle);
     }
+    this.addScooters();
+    this.addBus();
     return this;
+  }
+
+  addScooters() {
+    const spots = [
+      { x: -208, z: -31.5, heading: Math.PI / 2, colour: '#e6d16b' },
+      { x: -200, z: -31.5, heading: Math.PI / 2, colour: '#b9503f' },
+      { x: 168, z: -31.5, heading: Math.PI / 2, colour: '#3f8f8a' },
+      { x: 176, z: -31.5, heading: Math.PI / 2, colour: '#e8e3d6' },
+    ];
+    for (const spot of spots) {
+      const scooter = this.createCar({ type: 'scooter', x: spot.x, z: spot.z, heading: spot.heading, colour: spot.colour, parked: true });
+      scooter.aiControlled = false;
+      this.parked.push(scooter);
+    }
+  }
+
+  addBus() {
+    const group = new THREE.Group();
+    group.name = 'City bus';
+    const paint = new THREE.MeshStandardMaterial({ color: '#d9a53f', roughness: 0.62, metalness: 0.15 });
+    const teal = new THREE.MeshStandardMaterial({ color: '#2f7d78', roughness: 0.7 });
+    const glass = new THREE.MeshStandardMaterial({ color: '#17313a', roughness: 0.2, metalness: 0.3 });
+    const add = (geometry, material, x, y, z) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      return mesh;
+    };
+    add(new THREE.BoxGeometry(2.7, 2.7, 11.4), paint, 0, 1.75, 0);
+    add(new THREE.BoxGeometry(2.5, 0.18, 10.9), teal, 0, 3.15, 0);
+    add(new THREE.BoxGeometry(2.74, 0.26, 11.4), teal, 0, 1.05, 0);
+    add(new THREE.BoxGeometry(0.05, 0.95, 9.6), glass, -1.37, 2.2, 0);
+    add(new THREE.BoxGeometry(0.05, 0.95, 9.6), glass, 1.37, 2.2, 0);
+    add(new THREE.BoxGeometry(2.15, 1.1, 0.05), glass, 0, 2.2, 5.7);
+    add(new THREE.BoxGeometry(2.15, 1.0, 0.05), glass, 0, 2.2, -5.7);
+    for (const side of [-1, 1]) {
+      for (const end of [-1, 1]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.34, 12), new THREE.MeshStandardMaterial({ color: '#1b2024', roughness: 0.95 }));
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(side * 1.38, 0.55, end * 3.6);
+        wheel.castShadow = true;
+        group.add(wheel);
+      }
+    }
+    const bus = {
+      mesh: group,
+      position: new THREE.Vector3(-184, 0, -18.4),
+      heading: Math.PI / 2,
+      speed: 8.5,
+      waypoints: [
+        { x: 236, z: -18.4 },
+        { x: 236.4, z: 56.4 },
+        { x: -236.4, z: 56.4 },
+        { x: -236, z: -18.4 },
+      ],
+      index: 1,
+    };
+    group.position.copy(bus.position);
+    group.rotation.y = bus.heading;
+    this.scene.add(group);
+    this.bus = bus;
+  }
+
+  updateBus(dt) {
+    const bus = this.bus;
+    if (!bus) return;
+    const target = bus.waypoints[bus.index];
+    const dx = target.x - bus.position.x;
+    const dz = target.z - bus.position.z;
+    if (Math.hypot(dx, dz) < 7) {
+      bus.index = (bus.index + 1) % bus.waypoints.length;
+    }
+    const wanted = Math.atan2(dx, dz);
+    bus.heading += wrapAngle(wanted - bus.heading) * Math.min(1, dt * 1.8);
+    bus.position.x += Math.sin(bus.heading) * bus.speed * dt;
+    bus.position.z += Math.cos(bus.heading) * bus.speed * dt;
+    bus.mesh.position.copy(bus.position);
+    bus.mesh.rotation.y = bus.heading;
   }
 
   createCar(spec) {
     const vehicle = new Vehicle(spec);
     vehicle.driver = buildDriver(this.rand);
     vehicle.mesh.add(vehicle.driver);
+    const paintMaterial = vehicle.body?.material;
+    vehicle.lodDetail = [];
+    vehicle.mesh.traverse((object) => {
+      if (object.isMesh && object.material !== paintMaterial) vehicle.lodDetail.push(object);
+    });
     vehicle.mesh.traverse((object) => {
       if (!object.isMesh || object.name === 'Contact shadow') return;
       object.castShadow = false;
@@ -159,18 +249,28 @@ export class TrafficSystem {
     return nearest;
   }
 
+  updateVehicleLod(vehicle, distance) {
+    const detailed = distance < 40;
+    if (vehicle.lodDetail && vehicle.lodDetailVisible !== detailed) {
+      for (const part of vehicle.lodDetail) part.visible = detailed;
+      vehicle.lodDetailVisible = detailed;
+    }
+    vehicle.mesh.visible = distance < 145;
+  }
+
   update(dt, playerPosition, options = {}) {
     this.time += dt;
+    this.updateBus(dt);
     const playerVehicle = options.playerVehicle ?? null;
     for (const vehicle of this.parked) {
       vehicle.update(dt);
       const fromPlayer = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.z - playerPosition.z);
-      vehicle.mesh.visible = fromPlayer < 205;
+      this.updateVehicleLod(vehicle, fromPlayer);
     }
 
     for (const vehicle of this.moving) {
       const distanceFromPlayer = Math.hypot(vehicle.position.x - playerPosition.x, vehicle.position.z - playerPosition.z);
-      vehicle.mesh.visible = distanceFromPlayer < 225;
+      this.updateVehicleLod(vehicle, distanceFromPlayer);
       if (!vehicle.aiControlled || vehicle === playerVehicle) {
         vehicle.update(dt);
         continue;

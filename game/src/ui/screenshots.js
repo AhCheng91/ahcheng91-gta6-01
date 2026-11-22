@@ -339,6 +339,8 @@ async function stageMenu(game) {
   }
 
   game.menus.openPause('MAP');
+  game.traffic.update(0, game.player.position, { playerVehicle: null });
+  game.pedestrians.update(0, game.player.position);
   await settle(game, 40);
   game.shotSpeed = null;
   game.shotCamera = null;

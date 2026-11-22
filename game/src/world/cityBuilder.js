@@ -123,6 +123,9 @@ export class CityBuilder {
     this.waterLines = [];
     this.props = [];
     this.craneTrolleys = [];
+    this.movingCranes = [];
+    this.gulls = [];
+    this.sailboats = [];
     this.seaUniforms = null;
     this.roadSurfaces = [];
   }
@@ -136,6 +139,7 @@ export class CityBuilder {
     this.buildStreetFurniture();
     this.buildPort();
     this.buildLandmarks();
+    this.buildHorizonLife();
     return this;
   }
 
@@ -614,15 +618,17 @@ export class CityBuilder {
       this.registerProp(`Bin ${x}`, x + 4, -41.4, 0.4, 0.4, { kind: 'bin' });
     }
 
-    for (let x = -340; x <= -180; x += 19) {
-      if (isCarriageway(x, -45, 1.5) || isCarriageway(x + 5, -47.5, 1.5)) continue;
-      const color = ['#ff8d72', '#66cfc0', '#ffd981', '#f3f0d7'][Math.floor(this.random() * 4)];
-      umbrellas.push({ x, y: 2.5, z: -45, sx: 1, sy: 1, sz: 1, color });
-      parasolPoles.push({ x, y: 1.3, z: -45, sx: 0.09, sy: 2.6, sz: 0.09, color: '#e8dfc8' });
-      parasolBases.push({ x, y: 0.08, z: -45, sx: 0.9, sy: 0.16, sz: 0.9, color: '#c2a982' });
-      towels.push(box(x + 5, 0.08, -47.5, 2.7, 0.035, 1.7, color));
-      this.registerProp(`Beach umbrella ${x}`, x, -45, 1.4, 1.4, { kind: 'umbrella' });
-      this.registerProp(`Beach towel ${x}`, x + 5, -47.5, 1.4, 0.9, { kind: 'towel' });
+    for (let i = 0; i < 10; i += 1) {
+      const x = -322 + i * 15.5;
+      const z = -44.5 - (i % 2) * 2.4;
+      if (isCarriageway(x, z, 1.5) || isCarriageway(x + 5, z - 3, 1.5)) continue;
+      const color = ['#ff8d72', '#66cfc0', '#ffd981', '#f3f0d7', '#c5a1d6'][i % 5];
+      umbrellas.push({ x, y: 2.5, z, sx: 1, sy: 1, sz: 1, color });
+      parasolPoles.push({ x, y: 1.3, z, sx: 0.09, sy: 2.6, sz: 0.09, color: '#e8dfc8' });
+      parasolBases.push({ x, y: 0.08, z, sx: 0.9, sy: 0.16, sz: 0.9, color: '#c2a982' });
+      towels.push(box(x + 4.4, 0.08, z - 2.8, 2.7, 0.035, 1.7, i % 3 === 0 ? '#f4ead2' : color));
+      this.registerProp(`Beach umbrella ${i}`, x, z, 1.4, 1.4, { kind: 'umbrella' });
+      this.registerProp(`Beach towel ${i}`, x + 4.4, z - 2.8, 1.4, 0.9, { kind: 'towel' });
     }
 
     for (let x = -330; x <= 330; x += 4.5) {
@@ -670,7 +676,7 @@ export class CityBuilder {
       }
     }
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 }), containers, true, 'Container stacks'));
-    for (let i = 0; i < 3; i += 1) this.buildGantryCrane(128 + i * 82, -49);
+    for (let i = 0; i < 2; i += 1) this.buildGantryCrane(150 + i * 100, -49, true);
 
     const shipHull = new THREE.MeshStandardMaterial({ color: '#49636c', roughness: 0.8 });
     const shipDeck = new THREE.MeshStandardMaterial({ color: '#d8d4c4', roughness: 0.9 });
@@ -687,9 +693,63 @@ export class CityBuilder {
       wake.name = 'Boat wake';
       this.root.add(wake);
     }
+
+    // A moored container ship with deck stacks beside the dock.
+    const moored = new THREE.Group();
+    moored.name = 'Moored container ship';
+    const mooredHull = new THREE.Mesh(new THREE.BoxGeometry(132, 9, 24), shipHull);
+    mooredHull.position.set(214, 1.5, -99);
+    mooredHull.castShadow = true;
+    moored.add(mooredHull);
+    const mooredDeck = new THREE.Mesh(new THREE.BoxGeometry(126, 4, 20), shipDeck);
+    mooredDeck.position.set(214, 7.5, -99);
+    moored.add(mooredDeck);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(14, 13, 16), new THREE.MeshStandardMaterial({ color: '#e4ddca', roughness: 0.85 }));
+    bridge.position.set(270, 12, -99);
+    bridge.castShadow = true;
+    moored.add(bridge);
+    const deckBoxes = [];
+    const deckColours = ['#b8523f', '#357f7a', '#d09a39', '#476d86', '#a9b2a5'];
+    for (let row = 0; row < 5; row += 1) {
+      for (let column = 0; column < 9; column += 1) {
+        const level = (row + column) % 3;
+        deckBoxes.push(box(162 + column * 12.5, 11.5 + level * 2.6, -108 + row * 4.4,
+          11.4, 2.4, 4.1, deckColours[(column + row) % deckColours.length]));
+      }
+    }
+    moored.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 }), deckBoxes, true, 'Ship containers'));
+    this.root.add(moored);
+
+    // Two sailboats with white sails and soft wakes in the bay.
+    for (let i = 0; i < 2; i += 1) {
+      const boat = new THREE.Group();
+      boat.name = 'Sailboat';
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.9, 2.3), new THREE.MeshStandardMaterial({ color: '#e8e2d2', roughness: 0.8 }));
+      hull.position.y = 0.3;
+      boat.add(hull);
+      const deckStripe = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.22, 2.0), new THREE.MeshStandardMaterial({ color: '#4b8a86', roughness: 0.8 }));
+      deckStripe.position.y = 0.82;
+      boat.add(deckStripe);
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 8.4, 6), new THREE.MeshStandardMaterial({ color: '#b9ae97', roughness: 0.7 }));
+      mast.position.y = 4.6;
+      boat.add(mast);
+      const sail = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 5.5), new THREE.MeshBasicMaterial({ color: '#f5f1e3', side: THREE.DoubleSide, fog: true }));
+      sail.position.set(-0.2, 4.6, 0.02);
+      boat.add(sail);
+      const wake = new THREE.Mesh(new THREE.PlaneGeometry(20, 5), new THREE.MeshBasicMaterial({ color: '#d6f0e4', transparent: true, opacity: 0.32, depthWrite: false }));
+      wake.rotation.x = -Math.PI / 2;
+      wake.position.set(-11, -0.52, 0);
+      boat.add(wake);
+      const baseX = i === 0 ? -158 : -18;
+      const baseZ = i === 0 ? -118 : -146;
+      boat.position.set(baseX, -1.1, baseZ);
+      boat.rotation.y = i === 0 ? 0.3 : -0.2;
+      this.sailboats.push({ group: boat, baseX, baseZ, phase: i * 2.3 });
+      this.root.add(boat);
+    }
   }
 
-  buildGantryCrane(x, z) {
+  buildGantryCrane(x, z, moving = false) {
     const group = new THREE.Group();
     group.name = 'Dock gantry crane';
     const material = new THREE.MeshStandardMaterial({ color: '#dca944', roughness: 0.7, metalness: 0.25 });
@@ -726,6 +786,7 @@ export class CityBuilder {
     trolley.add(load);
     group.add(trolley);
     this.craneTrolleys.push({ group: trolley, origin: x - 30, phase: this.random() * 10 });
+    if (moving) this.movingCranes.push({ group, phase: this.random() * 10 });
     this.root.add(group);
   }
 
@@ -802,6 +863,43 @@ export class CityBuilder {
     this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: true }), skyline, false, 'Distant skyline silhouette'));
   }
 
+  buildHorizonLife() {
+    const random = createRandom(0x484f5249);
+    const ring = [];
+    for (let i = 0; i < 136; i += 1) {
+      const angle = (i / 136) * Math.PI * 2;
+      const radius = 690 + (i % 7) * 34 + random() * 55;
+      const x = Math.cos(angle) * radius;
+      const z = 150 + Math.sin(angle) * radius;
+      const height = 28 + random() * 150;
+      ring.push(box(x, height / 2 - 5, z, 16 + random() * 22, height, 16 + random() * 18,
+        random() < 0.55 ? '#2f5d63' : '#3c6b6f'));
+    }
+    this.root.add(makeInstances(new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: '#ffffff', fog: true }), ring, false, 'Distant skyline ring'));
+
+    this.root.add(this.makeRidge(-1030, 112,
+      new THREE.MeshBasicMaterial({ color: '#3d4a52', fog: true, side: THREE.DoubleSide }), 4));
+    const volcanicCone = new THREE.Mesh(new THREE.ConeGeometry(190, 86, 8, 1, true),
+      new THREE.MeshBasicMaterial({ color: '#37454c', fog: true, side: THREE.DoubleSide }));
+    volcanicCone.position.set(470, -2, -930);
+    volcanicCone.name = 'Horizon volcanic ridge';
+    this.root.add(volcanicCone);
+
+    const gullMaterial = new THREE.LineBasicMaterial({ color: '#f8f4e8', fog: true });
+    for (let i = 0; i < 7; i += 1) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+        -1.15, 0.18, 0, 0, 0, 0, 1.15, 0.18, -0.12,
+      ], 3));
+      const gull = new THREE.Line(geometry, gullMaterial);
+      gull.name = 'Seagull';
+      gull.position.set(-226 + i * 13, 11 + (i % 3) * 2.5, -64 - (i % 4) * 11);
+      this.gulls.push({ line: gull, phase: i * 0.9, radius: 14 + i * 3, height: 10 + (i % 4) * 2.5, x: -224 + i * 13, z: -70 - (i % 3) * 12 });
+      this.root.add(gull);
+    }
+  }
+
   makeRidge(z, height, material, seed) {
     const random = createRandom(seed * 7919);
     const vertices = [];
@@ -839,6 +937,20 @@ export class CityBuilder {
     }
     for (const trolley of this.craneTrolleys) {
       trolley.group.position.x = trolley.origin + Math.sin(time * 0.16 + trolley.phase) * 22;
+    }
+    for (const crane of this.movingCranes) {
+      crane.group.position.x = Math.sin(time * 0.07 + crane.phase) * 7;
+    }
+    for (const gull of this.gulls) {
+      const angle = time * 0.24 + gull.phase;
+      gull.line.position.set(gull.x + Math.cos(angle) * gull.radius, gull.height + Math.sin(time * 1.4 + gull.phase) * 1.3, gull.z + Math.sin(angle) * gull.radius);
+      gull.line.rotation.y = -angle + Math.PI * 0.5;
+      gull.line.scale.y = 1 + Math.sin(time * 5.2 + gull.phase) * 0.35;
+    }
+    for (const boat of this.sailboats) {
+      boat.group.position.x = boat.baseX + Math.sin(time * 0.09 + boat.phase) * 7;
+      boat.group.position.y = -1.1 + Math.sin(time * 0.7 + boat.phase) * 0.14;
+      boat.group.rotation.z = Math.sin(time * 0.65 + boat.phase) * 0.025;
     }
   }
 }
