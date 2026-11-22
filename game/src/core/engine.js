@@ -163,14 +163,14 @@ export class Engine {
     this.sun.name = 'Golden hour key light';
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -70;
-    this.sun.shadow.camera.right = 70;
-    this.sun.shadow.camera.top = 70;
-    this.sun.shadow.camera.bottom = -70;
+    this.sun.shadow.camera.left = -48;
+    this.sun.shadow.camera.right = 48;
+    this.sun.shadow.camera.top = 48;
+    this.sun.shadow.camera.bottom = -48;
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 400;
-    this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.02;
+    this.sun.shadow.camera.far = 320;
+    this.sun.shadow.bias = -0.00035;
+    this.sun.shadow.normalBias = 0.35;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
@@ -199,13 +199,18 @@ export class Engine {
     this.skyUniforms.midColor.value.copy(mixColor('mid'));
     this.skyUniforms.horizonColor.value.copy(mixColor('horizon'));
     this.scene.fog.color.copy(mixColor('fog'));
-    this.hemi.intensity = lower.fill + (upper.fill - lower.fill) * blend;
-    this.sun.intensity = lower.power + (upper.power - lower.power) * blend;
+    const goldenHour = hours >= 17.4 && hours <= 18.0;
+    const presetFill = lower.fill + (upper.fill - lower.fill) * blend;
+    const presetPower = lower.power + (upper.power - lower.power) * blend;
+    this.hemi.intensity = goldenHour ? 0.16 : presetFill;
+    this.sun.intensity = goldenHour ? 2.15 : presetPower;
     this.sun.color.copy(mixColor('sun'));
 
-    const elevation = Math.max(-0.12, Math.sin(((hours - 6) / 13) * Math.PI));
+    const elevation = goldenHour
+      ? THREE.MathUtils.degToRad(14)
+      : Math.max(-0.12, Math.sin(((hours - 6) / 13) * Math.PI));
     this.sun.castShadow = true;
-    const azimuth = -2.35 + (hours - 18.2) * 0.16;
+    const azimuth = goldenHour ? -2.72 : -2.35 + (hours - 18.2) * 0.16;
     const horizontal = Math.sqrt(Math.max(0.001, 1 - elevation * elevation));
     this.sunDirection = new THREE.Vector3(Math.cos(azimuth) * horizontal, elevation, Math.sin(azimuth) * horizontal).normalize();
     this.skyUniforms.sunDirection.value.copy(this.sunDirection);
