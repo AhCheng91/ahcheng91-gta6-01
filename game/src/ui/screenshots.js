@@ -273,13 +273,56 @@ async function stageDrive(game) {
 }
 
 async function stageMenu(game) {
-  game.timeOfDay = 18.0;
+  game.timeOfDay = 17.6;
   game.engine.setTimeOfDay(game.timeOfDay);
+  restoreFollowCamera(game);
   game.wanted.setStars(0, game.player.position);
   game.police.clear();
   game.hud.setMission({ job: 'JOB 03 · DOCK HEIST', stage: 'STAGE 2 / 3', stageIndex: 2, stageCount: 3, objective: 'Steal the manifest van at Puerto Nuevo', nextHint: 'LOSE THE TWO-STAR RESPONSE' });
+
+  const heading = Math.PI / 2;
+  const carPos = new THREE.Vector3(-180, 0, -22);
+  const hero = game.heroVehicle;
+  if (hero) {
+    hero.position.copy(carPos);
+    hero.heading = heading;
+    hero.speed = 0;
+    hero.mesh.position.copy(hero.position);
+    hero.mesh.rotation.y = hero.heading;
+    hero.occupants = hero.occupants.filter((p) => p !== game.player);
+  }
+  game.player.transition = null;
+  game.player.inVehicle = null;
+  game.player.cameraBlend = 0;
+  game.player.cameraBlendTarget = 0;
+  game.player.mesh.visible = true;
+  game.player.mesh.scale.y = 1;
+  game.player.position.set(carPos.x - 2, 0, carPos.z - 3);
+  game.player.mesh.position.copy(game.player.position);
+  game.player.viewYaw = heading;
+  game.player.facing = heading;
+  game.player.mesh.rotation.y = heading;
+
+  const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+  const left = new THREE.Vector3(-Math.cos(heading), 0, Math.sin(heading));
+  const cameraPos = carPos.clone().addScaledVector(forward, -12).addScaledVector(left, 2).setY(4);
+  const lookAt = carPos.clone().addScaledVector(forward, 28).addScaledVector(left, -3).setY(1.2);
+
+  for (const ped of game.pedestrians.peds) {
+    const dx = ped.position.x - cameraPos.x;
+    const dz = ped.position.z - cameraPos.z;
+    if (Math.hypot(dx, dz) < 10) {
+      ped.position.set(cameraPos.x + 14, 0, cameraPos.z - 14);
+      ped.group.position.copy(ped.position);
+      ped.target = null;
+    }
+  }
+
   game.menus.openPause('MAP');
   await settle(game, 40);
-  lockCamera(game, false);
+  game.shotSpeed = null;
+  game.shotCamera = null;
+  lockCamera(game, false, null, {});
+  pinCamera(game, cameraPos, lookAt);
   return true;
 }
