@@ -150,72 +150,6 @@ function vehicleCorners(vehicle) {
   return points;
 }
 
-function fitHeroCamera(game, car, forward, options = {}) {
-  const distances = options.distances ?? [9, 11, 13, 15];
-  const offsets = options.offsets ?? [-2.4, -1.2, 0, 1.2, 2.4];
-  const heights = options.heights ?? [2.0, 2.4];
-  const fov = options.fov ?? 62;
-  const minWidth = options.minWidth ?? 0.22;
-  const maxWidth = options.maxWidth ?? 0.5;
-  const camera = game.engine.camera;
-  const right = new THREE.Vector3(-forward.z, 0, forward.x);
-  const points = car ? vehicleCorners(car) : [];
-  const lookAt = car
-    ? car.position.clone().addScaledVector(forward, 12).add(new THREE.Vector3(0, 1.2, 0))
-    : new THREE.Vector3();
-
-  const tryCandidate = (distance, offset, height) => {
-    const position = car.position.clone().addScaledVector(forward, -distance).addScaledVector(right, offset).setY(height);
-    camera.position.copy(position);
-    camera.fov = fov;
-    camera.updateProjectionMatrix();
-    camera.lookAt(lookAt);
-    camera.updateMatrixWorld(true);
-    const span = projectedSpan(camera, points);
-    return { position, span };
-  };
-
-  let chosen = null;
-  for (const distance of distances) {
-    for (const offset of offsets) {
-      for (const height of heights) {
-        const { position, span } = tryCandidate(distance, offset, height);
-        if (!span) continue;
-        const inside = span.minX > -0.85 && span.maxX < 0.85 && span.minY > -0.9 && span.maxY < 0.75;
-        const sized = span.width >= minWidth && span.width <= maxWidth;
-        if (!inside || !sized) continue;
-        chosen = { distance, offset, height, position, span };
-        break;
-      }
-      if (chosen) break;
-    }
-    if (chosen) break;
-  }
-
-  if (!chosen) {
-    const distance = 13;
-    const offset = 0;
-    const height = 2.4;
-    const { position, span } = tryCandidate(distance, offset, height);
-    chosen = { distance, offset, height, position, span };
-  }
-
-  const ndc = chosen.span ? {
-    minX: Number(chosen.span.minX.toFixed(3)),
-    maxX: Number(chosen.span.maxX.toFixed(3)),
-    minY: Number(chosen.span.minY.toFixed(3)),
-    maxY: Number(chosen.span.maxY.toFixed(3)),
-  } : null;
-  const report = {
-    distance: chosen.distance,
-    offset: chosen.offset,
-    height: chosen.height,
-    ndc,
-  };
-  console.info('[shot:fit]', JSON.stringify(report));
-  return { position: chosen.position, lookAt, fov, report };
-}
-
 function largestBuildingFaceFraction(camera) {
   let largest = 0;
   for (const block of BLOCKS) {
@@ -265,9 +199,8 @@ function countNearbyObjects(game, point, radius = 6) {
 }
 
 function clearTrafficNear(game, point, radius = 30) {
-  const policeVehicles = new Set(game.police.units.map((unit) => unit.vehicle).filter(Boolean));
-  for (const vehicle of game.traffic.vehicles) {
-    if (vehicle === game.heroVehicle || policeVehicles.has(vehicle)) continue;
+  for (const vehicle of game.traffic.moving) {
+    if (vehicle === game.heroVehicle) continue;
     if (Math.hypot(vehicle.position.x - point.x, vehicle.position.z - point.z) > radius) continue;
     vehicle.position.set(point.x - 160, 0, point.z + 120);
     vehicle.mesh.position.copy(vehicle.position);
@@ -374,45 +307,15 @@ function lockCamera(game, blended, shotSpeed = null, cameraOpts = null) {
   game.engine.snapCamera(game.player, cameraOpts ?? {});
 }
 
-function coastHeroPlacement(game) {
-  const heading = Math.PI / 2;
-  const { forward, left } = frameBasis(heading);
-  const startX = -250;
-  const laneZ = -21.3;
-  const hero = game.heroVehicle;
-
-  const makeFrame = (x) => {
-    const carPos = new THREE.Vector3(x, 0, laneZ);
-    const cameraPos = carPos.clone().addScaledVector(forward, -6.8).addScaledVector(left, 3.5).setY(2.3);
-    const lookAt = carPos.clone().addScaledVector(forward, 20).setY(1.2);
-    return { carPos, cameraPos, lookAt };
-  };
-
-  let chosen = null;
-  let chosenVisible = Infinity;
-  for (const offset of [20, 19, 18, 17, 16, 15, 14, 13, 12, -12, -13, -14, -15, -16, -17, -18, -19, -20]) {
-    const frame = makeFrame(startX + offset);
-    const probe = game.engine.camera.clone();
-    probe.position.copy(frame.cameraPos);
-    probe.lookAt(frame.lookAt);
-    probe.fov = 66;
-    probe.updateProjectionMatrix();
-    probe.updateMatrixWorld(true);
-    const testHero = { position: frame.carPos, heading, spec: hero?.spec };
-    const visible = visibleCrosswalks(probe, testHero);
-    if (visible < chosenVisible) { chosen = frame; chosenVisible = visible; }
-    if (visible === 0) break;
-  }
-  return { heroPos: chosen.carPos, heading, forward, left };
-}
-
 async function stageChase(game) {
   game.timeOfDay = 17.6;
   game.engine.setTimeOfDay(game.timeOfDay);
 
   const hero = game.heroVehicle;
-  const { heroPos, heading, forward } = coastHeroPlacement(game);
-  const { right } = frameBasis(heading);
+  const heading = Math.PI / 2;
+  const { forward, left } = frameBasis(heading);
+  const heroPos = new THREE.Vector3(-74, 0, -22);
+  const heroRoof = 1.5 + 0.6 * (hero?.spec?.cabin ?? 0.6);
   const wheelbase = (hero?.spec?.length ?? 4.5) * 0.32;
   const rearAxle = heroPos.clone().addScaledVector(forward, -wheelbase);
 
@@ -445,13 +348,7 @@ async function stageChase(game) {
 
   game.police.dispatch = () => {};
   game.police.cooldowns.roadblock = 9999;
-  clearTrafficNear(game, heroPos, 20);
-
-  const extras = game.police.units.filter((unit) => unit.kind === 'CRUISER' && unit.vehicle);
-  while (extras.length > 3) game.police.removeUnit(extras.pop());
-  for (const unit of [...game.police.units]) {
-    if (unit.kind === 'ROADBLOCK' || unit.kind === 'FOOT') game.police.removeUnit(unit);
-  }
+  clearTrafficNear(game, heroPos, 36);
 
   if (hero) {
     hero.position.copy(heroPos);
@@ -476,9 +373,9 @@ async function stageChase(game) {
     const vehicle = unit.vehicle;
     if (!vehicle) return;
     if (index < 2) {
-      const behind = 8 + index * 2;
-      const lateral = index === 0 ? 2.5 : -2.5;
-      vehicle.position.copy(heroPos).addScaledVector(forward, -behind).addScaledVector(right, lateral);
+      const behind = 3.5 + index * 0.8;
+      const leftOffset = index === 0 ? 4 : -4;
+      vehicle.position.copy(heroPos).addScaledVector(forward, -behind).addScaledVector(left, leftOffset);
       vehicle.heading = Math.atan2(heroPos.x - vehicle.position.x, heroPos.z - vehicle.position.z);
       vehicle.speed = 0;
       vehicle.maxSpeed = 0;
@@ -487,7 +384,7 @@ async function stageChase(game) {
       vehicle.mesh.rotation.y = vehicle.heading;
       if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
       unit.position = vehicle.position;
-      unit.tactic = 'PURSUIT';
+      unit.tactic = 'CHASE';
     } else {
       vehicle.position.set(heroPos.x - 210 - index * 12, 0, heroPos.z + 8);
       vehicle.speed = 0;
@@ -501,7 +398,7 @@ async function stageChase(game) {
   const heli = game.police.units.find((u) => u.kind === 'HELICOPTER' && !u.dead);
   if (heli) {
     heli.kind = 'STATIC';
-    heli.mesh.position.copy(heroPos).addScaledVector(forward, 10).setY(20);
+    heli.mesh.position.copy(heroPos).addScaledVector(forward, 18).addScaledVector(left, -12).setY(18);
     heli.position = heli.mesh.position;
     if (heli.spotlight) {
       heli.spotlight.position.copy(heli.mesh.position);
@@ -510,17 +407,14 @@ async function stageChase(game) {
     }
     if (heli.spotlightCone) heli.spotlightCone.visible = false;
     ensureGroundSpotlightPool(game, heroPos.clone().addScaledVector(forward, 25).setY(0.03));
-    game.police.units = game.police.units.filter((unit) => unit !== heli);
-    game.police.onDispatchChange(game.police.getHudUnits());
   }
 
-  const fit = fitHeroCamera(game, hero, forward);
-  const cameraPos = fit.position;
-  const lookAt = fit.lookAt;
+  const cameraPos = heroPos.clone().addScaledVector(forward, -11).addScaledVector(left, 1.4).setY(1.55);
+  const lookAt = heroPos.clone().setY(heroRoof + 2.47);
   game.shotSpeed = 0;
   game.shotCamera = null;
   lockCamera(game, true, 0, {});
-  pinCamera(game, cameraPos, lookAt, fit.fov);
+  pinCamera(game, cameraPos, lookAt, 80);
   verifyShotCamera(game, cameraPos, hero ? vehicleCorners(hero) : [], 'chase');
 
   const carSpan = projectedSpan(game.engine.camera, hero ? vehicleCorners(hero) : []);
@@ -642,7 +536,34 @@ async function stageDrive(game) {
   game.engine.setTimeOfDay(game.timeOfDay);
 
   const hero = game.heroVehicle;
-  const { heroPos, heading, forward } = coastHeroPlacement(game);
+  const heading = Math.PI / 2;
+  const { forward, left } = frameBasis(heading);
+  const startX = -250;
+  const laneZ = -21.3;
+
+  const makeFrame = (x) => {
+    const carPos = new THREE.Vector3(x, 0, laneZ);
+    const cameraPos = carPos.clone().addScaledVector(forward, -6.8).addScaledVector(left, 3.5).setY(2.3);
+    const lookAt = carPos.clone().addScaledVector(forward, 20).setY(1.2);
+    return { carPos, cameraPos, lookAt };
+  };
+
+  let chosen = null;
+  let chosenVisible = Infinity;
+  for (const offset of [20, 19, 18, 17, 16, 15, 14, 13, 12, -12, -13, -14, -15, -16, -17, -18, -19, -20]) {
+    const frame = makeFrame(startX + offset);
+    const probe = game.engine.camera.clone();
+    probe.position.copy(frame.cameraPos);
+    probe.lookAt(frame.lookAt);
+    probe.fov = 66;
+    probe.updateProjectionMatrix();
+    probe.updateMatrixWorld(true);
+    const testHero = { position: frame.carPos, heading, spec: hero?.spec };
+    const visible = visibleCrosswalks(probe, testHero);
+    if (visible < chosenVisible) { chosen = frame; chosenVisible = visible; }
+    if (visible === 0) break;
+  }
+  const { carPos: heroPos, cameraPos, lookAt } = chosen;
 
   if (hero) {
     hero.position.copy(heroPos);
@@ -662,7 +583,7 @@ async function stageDrive(game) {
   game.hud.setRadio('LAGOON FM 98.1', 'SYNTHWAVE');
   await settle(game, 60);
 
-  clearTrafficNear(game, heroPos, 14);
+  clearTrafficNear(game, heroPos, 34);
   hideCrosswalkPaint(game, heroPos, 100);
   if (hero) {
     hero.position.copy(heroPos);
@@ -686,13 +607,10 @@ async function stageDrive(game) {
     }
   }
 
-  const fit = fitHeroCamera(game, hero, forward);
-  const cameraPos = fit.position;
-  const lookAt = fit.lookAt;
   game.shotSpeed = 0;
   game.shotCamera = null;
   lockCamera(game, true, 0, {});
-  pinCamera(game, cameraPos, lookAt, fit.fov);
+  pinCamera(game, cameraPos, lookAt, 66);
   verifyShotCamera(game, cameraPos, hero ? vehicleCorners(hero) : [], 'drive');
   game.engine.camera.updateMatrixWorld(true);
 
