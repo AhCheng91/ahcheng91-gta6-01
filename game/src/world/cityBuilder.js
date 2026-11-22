@@ -99,6 +99,7 @@ export class CityBuilder {
     this.props = [];
     this.craneTrolleys = [];
     this.seaUniforms = null;
+    this.roadSurfaces = [];
   }
 
   build() {
@@ -252,7 +253,9 @@ export class CityBuilder {
       const center = (road.from + road.to) / 2;
       const width = alongX ? length : road.width;
       const depth = alongX ? road.width : length;
-      const surface = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), asphalt.clone());
+      const surfaceMaterial = asphalt.clone();
+      this.roadSurfaces.push(surfaceMaterial);
+      const surface = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), surfaceMaterial);
       surface.name = `Carriageway ${road.id}`;
       surface.rotation.x = -Math.PI / 2;
       surface.position.set(alongX ? center : road.at, 0.015, alongX ? road.at : center);
@@ -762,6 +765,11 @@ export class CityBuilder {
 
   update(dt) {
     const time = performance.now() * 0.001;
+    const lowSun = 1 - THREE.MathUtils.smoothstep(Math.abs(this.engine.sunDirection.y), 0.02, 0.38);
+    for (const material of this.roadSurfaces) {
+      material.roughness = 0.74 - lowSun * 0.18;
+      material.metalness = 0.08 + lowSun * 0.1;
+    }
     for (const line of this.waterLines) line.material.opacity = 0.22 + Math.sin(time * 0.8) * 0.05;
     if (this.seaUniforms) {
       this.seaUniforms.time.value = time;

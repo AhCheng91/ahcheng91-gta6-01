@@ -49,14 +49,15 @@ export function buildVehicleMesh(typeId, colour) {
   const group = new THREE.Group();
   group.name = spec.name;
   const paint = new THREE.MeshPhysicalMaterial({
-    color: colour ?? spec.colour, roughness: 0.26, metalness: 0.34,
-    clearcoat: 0.8, clearcoatRoughness: 0.16,
+    color: colour ?? spec.colour, roughness: 0.25, metalness: 0.6,
+    clearcoat: 0.9, clearcoatRoughness: 0.12,
   });
   const trim = new THREE.MeshStandardMaterial({ color: spec.police ? '#263946' : '#313a3e', roughness: 0.7 });
   const glass = new THREE.MeshPhysicalMaterial({
-    color: '#193341', roughness: 0.1, metalness: 0.22,
-    clearcoat: 1, clearcoatRoughness: 0.06,
+    color: '#102732', roughness: 0.06, metalness: 0.35,
+    clearcoat: 1, clearcoatRoughness: 0.04,
   });
+  const glassRim = new THREE.MeshBasicMaterial({ color: '#8fb7c2', transparent: true, opacity: 0.55, fog: true });
   const length = spec.length;
   const width = spec.width;
   const wheelRadius = typeId === 'scooter' ? 0.32 : 0.42;
@@ -65,6 +66,8 @@ export function buildVehicleMesh(typeId, colour) {
   addBox(group, width * 0.96, 0.28, length * 0.32, 0, 1.03, length * 0.31, paint);
   addBox(group, width * 0.86, 0.72 * spec.cabin, length * 0.46, 0, 1.08 + 0.36 * spec.cabin, -length * 0.06, paint);
   addBox(group, width * 0.87, 0.48 * spec.cabin, length * 0.44, 0, 1.12 + 0.36 * spec.cabin, -length * 0.06, glass, false);
+  addBox(group, width * 0.88, 0.035, length * 0.45, 0, 1.12 + 0.6 * spec.cabin, -length * 0.06, glassRim, false);
+  addBox(group, width * 0.88, 0.035, length * 0.45, 0, 1.12 + 0.12 * spec.cabin, -length * 0.06, glassRim, false);
   addBox(group, width * 0.84, 0.12, length * 0.42, 0, 1.5 + 0.6 * spec.cabin, -length * 0.06, paint);
   addBox(group, width * 1.03, 0.2, 0.22, 0, 0.48, length / 2, trim);
   addBox(group, width * 1.03, 0.2, 0.22, 0, 0.48, -length / 2, trim);
