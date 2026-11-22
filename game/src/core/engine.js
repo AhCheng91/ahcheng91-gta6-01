@@ -204,7 +204,7 @@ export class Engine {
     this.sun.color.copy(mixColor('sun'));
 
     const elevation = Math.max(-0.12, Math.sin(((hours - 6) / 13) * Math.PI));
-    this.sun.castShadow = elevation > 0.02;
+    this.sun.castShadow = true;
     const azimuth = -2.35 + (hours - 18.2) * 0.16;
     const horizontal = Math.sqrt(Math.max(0.001, 1 - elevation * elevation));
     this.sunDirection = new THREE.Vector3(Math.cos(azimuth) * horizontal, elevation, Math.sin(azimuth) * horizontal).normalize();
