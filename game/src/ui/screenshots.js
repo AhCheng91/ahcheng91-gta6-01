@@ -373,8 +373,8 @@ async function stageChase(game) {
     const vehicle = unit.vehicle;
     if (!vehicle) return;
     if (index < 2) {
-      const behind = 2 + index * 0.8;
-      const leftOffset = 3.5 + index * 1;
+      const behind = 3.5 + index * 0.8;
+      const leftOffset = index === 0 ? 4 : -4;
       vehicle.position.copy(heroPos).addScaledVector(forward, -behind).addScaledVector(left, leftOffset);
       vehicle.heading = Math.atan2(heroPos.x - vehicle.position.x, heroPos.z - vehicle.position.z);
       vehicle.speed = 0;
@@ -409,8 +409,8 @@ async function stageChase(game) {
     ensureGroundSpotlightPool(game, heroPos.clone().addScaledVector(forward, 25).setY(0.03));
   }
 
-  const cameraPos = heroPos.clone().addScaledVector(forward, -10).addScaledVector(left, 1.4).setY(1.55);
-  const lookAt = heroPos.clone().setY(heroRoof + 2.67);
+  const cameraPos = heroPos.clone().addScaledVector(forward, -11).addScaledVector(left, 1.4).setY(1.55);
+  const lookAt = heroPos.clone().setY(heroRoof + 2.47);
   game.shotSpeed = 0;
   game.shotCamera = null;
   lockCamera(game, true, 0, {});
