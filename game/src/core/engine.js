@@ -25,6 +25,28 @@ const SKY_FRAGMENT = `
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
 
+  float valueNoise(vec2 p) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(cell);
+    float b = hash21(cell + vec2(1.0, 0.0));
+    float c = hash21(cell + vec2(0.0, 1.0));
+    float d = hash21(cell + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  float fbm(vec2 p) {
+    float total = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 4; i++) {
+      total += amplitude * valueNoise(p);
+      p *= 2.07;
+      amplitude *= 0.5;
+    }
+    return total;
+  }
+
   void main() {
     vec3 direction = normalize(vDirection);
     float h = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
@@ -41,6 +63,21 @@ const SKY_FRAGMENT = `
     float halo = pow(max(sunDot, 0.0), 320.0);
     color += vec3(1.0, 0.82, 0.58) * disc * (0.9 - night * 0.3);
     color += vec3(1.0, 0.54, 0.28) * halo * 0.32 * (1.0 - night * 0.5);
+
+    // Thin, wind-stretched clouds: a warm underlit deck low in the sky while the sun is up.
+    if (direction.y > 0.0) {
+      vec2 streak = direction.xz / (direction.y + 0.16);
+      float band = fbm(streak * vec2(2.4, 0.55) + vec2(6.3, 1.7));
+      float wisp = fbm(streak * vec2(4.6, 0.9) + vec2(21.0, 9.0));
+      float density = smoothstep(0.45, 0.62, band * 0.78 + wisp * 0.46);
+      float deck = smoothstep(0.006, 0.04, direction.y) * (1.0 - smoothstep(0.38, 0.70, direction.y));
+      float lighting = clamp(sunDot * 0.55 + 0.45, 0.0, 1.0);
+      vec3 warmCloud = mix(vec3(0.52, 0.38, 0.52), vec3(1.0, 0.78, 0.55), lighting);
+      vec3 litEdge = vec3(1.0, 0.93, 0.80) * (0.55 + 0.45 * lighting);
+      vec3 cloudColor = mix(warmCloud, litEdge, smoothstep(0.35, 0.95, density) * 0.7);
+      float cloudAlpha = density * deck * (0.80 - night * 0.5);
+      color = mix(color, cloudColor, cloudAlpha);
+    }
 
     // Stars and a low city glow only appear once the key light has set.
     vec2 starCell = floor(direction.xy * 320.0 + direction.z * 13.0);

@@ -10,7 +10,7 @@ const TABS = ['MAP', 'STORY', 'STATS', 'CREW', 'CONTROLS', 'SAVE'];
 
 const MARKUP = `
 <style>
-#pause-menu { width: min(1180px, 94vw); max-height: 90vh; background: linear-gradient(160deg, rgba(8,22,30,0.98), rgba(5,14,20,0.98)); }
+#pause-menu { width: min(1180px, 94vw); max-height: 90vh; background: linear-gradient(160deg, rgba(8,22,30,0.88), rgba(5,14,20,0.90)); }
 #pause-menu .pause-top { align-items: center; gap: 14px; padding: 12px 18px 11px; background: linear-gradient(90deg, rgba(255,204,121,0.08), transparent 38%); }
 #pause-menu .pause-brand { min-width: 190px; display: flex; flex-direction: column; gap: 2px; }
 #pause-menu .pause-wordmark { font-family: Georgia, 'Times New Roman', serif; font-size: 23px; font-weight: 700; letter-spacing: 0.12em; color: var(--gold); text-shadow: 0 2px 14px rgba(255,190,90,0.3); white-space: nowrap; }

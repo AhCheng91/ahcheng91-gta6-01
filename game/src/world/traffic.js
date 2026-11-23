@@ -186,6 +186,7 @@ export class TrafficSystem {
     vehicle.body.castShadow = true;
     for (const wheel of vehicle.wheels) wheel.traverse((part) => { if (part.isMesh) part.castShadow = true; });
     vehicle.aiControlled = Boolean(spec.parked) === false;
+    vehicle.hero = Boolean(spec.hero);
     vehicle.aiSeed = this.rand() * 10;
     this.scene.add(vehicle.mesh);
     this.vehicles.push(vehicle);

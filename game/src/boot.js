@@ -83,7 +83,9 @@ export class MareaRojaGame {
     });
     this.pedestrians.populate(82, SPAWN_POINTS.onFoot);
     this.state.pedestrians = this.pedestrians.peds;
-    this.heroVehicle = this.traffic.parked.find((vehicle) => vehicle.hero) ?? this.traffic.parked[0];
+    this.heroVehicle = this.traffic.parked.find((vehicle) => vehicle.hero)
+      ?? this.traffic.parked.find((vehicle) => vehicle.type === 'sprint')
+      ?? this.traffic.parked[0];
 
     this.lastWantedStars = 0;
     this.wanted = new WantedSystem({

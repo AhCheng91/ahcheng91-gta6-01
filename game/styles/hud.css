@@ -676,7 +676,7 @@ html, body {
   max-height: 86vh;
   display: flex;
   flex-direction: column;
-  background: rgba(5, 15, 22, 0.96);
+  background: rgba(5, 15, 22, 0.90);
   border: 1px solid rgba(255, 227, 187, 0.28);
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.68);
 }
