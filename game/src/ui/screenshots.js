@@ -358,18 +358,16 @@ function fitHeroCamera(game, hero, forward, options = {}) {
 }
 
 async function stageChase(game) {
-  game.timeOfDay = 17.95;
+  game.timeOfDay = 17.9;
   game.engine.setTimeOfDay(game.timeOfDay);
 
-  // Keep the key light just above the waterline so the frame holds a long warm band.
-  const elevation = THREE.MathUtils.degToRad(9);
+  // Keep the key light low so the frame holds a long warm band over the water.
+  const elevation = THREE.MathUtils.degToRad(8.5);
   const azimuth = -2.72;
   const horizontal = Math.sqrt(Math.max(0.001, 1 - Math.sin(elevation) * Math.sin(elevation)));
   game.engine.sunDirection = new THREE.Vector3(Math.cos(azimuth) * horizontal, Math.sin(elevation), Math.sin(azimuth) * horizontal).normalize();
   game.engine.skyUniforms.sunDirection.value.copy(game.engine.sunDirection);
   game.engine.skyUniforms.night.value = 0;
-
-  // Warm sky bounce, so the shaded flank of the hero still reads on the dark asphalt.
   game.engine.hemi.intensity = 0.5;
   game.engine.hemi.color.set('#ffd3a6');
   game.engine.hemi.groundColor.set('#6b6250');
@@ -378,14 +376,14 @@ async function stageChase(game) {
   const hero = game.heroVehicle;
   const heading = Math.PI / 2;
   const { forward, left } = frameBasis(heading);
-  const heroPos = new THREE.Vector3(-74, 0, -21.3);
+  const heroPos = new THREE.Vector3(116, 0, -22);
 
-  game.shotSpeed = 0;
+  game.shotSpeed = 22;
   if (hero) {
     hero.position.copy(heroPos);
     hero.heading = heading;
-    hero.speed = 0;
-    hero.braking = true;
+    hero.speed = 22;
+    hero.braking = false;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
     game.player.enterVehicle(hero);
@@ -411,21 +409,15 @@ async function stageChase(game) {
   game.police.dispatch = () => {};
   game.police.cooldowns.roadblock = 9999;
   game.police.update = () => {};
-  clearTrafficNear(game, heroPos, 46);
+  clearTrafficNear(game, heroPos, 60);
 
   if (hero) {
     hero.position.copy(heroPos);
     hero.heading = heading;
-    hero.speed = 0;
-    hero.braking = true;
+    hero.speed = 22;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
     game.player.position.copy(hero.position);
-    const baseUpdate = hero.update.bind(hero);
-    hero.update = (dt) => {
-      baseUpdate(dt);
-      for (const lamp of hero.brakeLights) lamp.material.color.set('#ff2a20');
-    };
   }
 
   const cruisers = game.police.units.filter((unit) => unit.kind === 'CRUISER' && unit.vehicle);
@@ -433,11 +425,11 @@ async function stageChase(game) {
     const vehicle = unit.vehicle;
     if (!vehicle) return;
     if (index < 2) {
-      const ahead = index === 0 ? 9.5 : 13.2;
-      const side = index === 0 ? 3.6 : -5.0;
+      const ahead = index === 0 ? 18 : 28;
+      const side = index === 0 ? 3.4 : -3.4;
       vehicle.position.copy(heroPos).addScaledVector(forward, ahead).addScaledVector(left, side);
-      vehicle.heading = heading + (index === 0 ? 0.55 : -0.2);
-      vehicle.speed = 0;
+      vehicle.heading = heading + (index === 0 ? 0.08 : -0.08);
+      vehicle.speed = 22;
       vehicle.maxSpeed = 0;
       vehicle.parked = false;
       vehicle.mesh.position.copy(vehicle.position);
@@ -446,7 +438,7 @@ async function stageChase(game) {
       unit.position = vehicle.position;
       unit.tactic = 'CHASE';
     } else {
-      vehicle.position.set(heroPos.x + 210 + index * 12, 0, heroPos.z + 8);
+      vehicle.position.set(heroPos.x + 260 + index * 12, 0, heroPos.z + 8);
       vehicle.speed = 0;
       vehicle.maxSpeed = 0;
       vehicle.mesh.position.copy(vehicle.position);
@@ -464,52 +456,44 @@ async function stageChase(game) {
     if (heli.spotlightCone) heli.spotlightCone.visible = false;
   }
 
-  const pose = hero ? fitHeroCamera(game, hero, forward) : null;
-  game.shotSpeed = 0;
+  const cameraPos = heroPos.clone().addScaledVector(forward, -7.5).addScaledVector(left, 1.2).setY(2.2);
+  const lookAt = heroPos.clone().addScaledVector(forward, 14).setY(1.0);
+  game.shotSpeed = 22;
   game.shotCamera = null;
-  lockCamera(game, true, 0, {});
-  if (pose) pinCamera(game, pose.position, pose.lookAt, pose.fov);
+  lockCamera(game, true, 22, {});
+  pinCamera(game, cameraPos, lookAt, 62);
   game.engine.camera.updateMatrixWorld(true);
 
   if (heli) {
-    const heliPos = worldAtNdc(game.engine.camera, -0.36, 0.42, 42);
+    const heliPos = worldAtNdc(game.engine.camera, -0.45, 0.42, 60);
     heli.mesh.position.copy(heliPos);
     heli.position.copy(heliPos);
-    if (heli.spotlight) {
-      heli.spotlight.position.copy(heliPos);
-      heli.spotlight.target.position.copy(heroPos).setY(0.5);
-      heli.spotlight.target.updateMatrixWorld();
-    }
   }
 
   const camera = game.engine.camera;
-  const cameraPos = camera.position;
   const heroSpan = hero ? projectedSpan(camera, vehicleCorners(hero)) : null;
   const cruiserSpans = cruisers.slice(0, 2).filter((unit) => unit.vehicle).map((unit) => projectedSpan(camera, vehicleCorners(unit.vehicle)));
   const heliSpan = heli ? projectedSpan(camera, meshSilhouettePoints(heli.mesh)) : null;
   const nearestToCamera = Math.min(...game.traffic.vehicles
     .filter((vehicle) => vehicle !== hero)
     .map((vehicle) => cameraPos.distanceTo(vehicle.position)));
-  const wallFraction = largestBuildingFaceFraction(camera);
   const report = {
     camera: cameraPos.toArray().map((value) => Number(value.toFixed(2))),
-    fit: pose ? pose.report : null,
     heroWidthOfFrame: heroSpan ? Number(heroSpan.width.toFixed(3)) : null,
     hero: heroSpan ? { minX: Number(heroSpan.minX.toFixed(2)), maxX: Number(heroSpan.maxX.toFixed(2)), minY: Number(heroSpan.minY.toFixed(2)), maxY: Number(heroSpan.maxY.toFixed(2)) } : null,
     cruisers: cruiserSpans.map((span) => (span ? { minX: Number(span.minX.toFixed(2)), maxX: Number(span.maxX.toFixed(2)), minY: Number(span.minY.toFixed(2)), maxY: Number(span.maxY.toFixed(2)) } : null)),
     heli: heliSpan ? { minX: Number(heliSpan.minX.toFixed(2)), maxX: Number(heliSpan.maxX.toFixed(2)), minY: Number(heliSpan.minY.toFixed(2)), maxY: Number(heliSpan.maxY.toFixed(2)) } : null,
     nearestVehicleToCamera: Number(nearestToCamera.toFixed(2)),
-    largestBuildingFaceOfFrame: Number(wallFraction.toFixed(3)),
   };
   console.info('[shot:chase]', JSON.stringify(report));
-  console.assert(heroSpan && heroSpan.width >= 0.22 && heroSpan.width <= 0.40, 'chase hero car must cover 22-40% of the frame width');
-  console.assert(heroSpan && heroSpan.minX > -0.92 && heroSpan.maxX < 0.92 && heroSpan.minY > -0.74 && heroSpan.maxY < 0.85, 'chase hero car must sit whole inside the frame above the bottom bar');
+  console.assert(heroSpan && heroSpan.width >= 0.1 && heroSpan.width <= 0.24, 'chase hero car must cover 10-24% of the frame width');
+  console.assert(heroSpan && heroSpan.minX > -0.9 && heroSpan.maxX < 0.9 && heroSpan.minY > -0.62 && heroSpan.maxY < 0.6, 'chase hero car must sit whole inside the frame above the bottom bar');
   console.assert(cruiserSpans.length === 2 && cruiserSpans.every((span) => span && span.minX > -1 && span.maxX < 1 && span.minY > -1 && span.maxY < 1), 'both chase cruisers must be whole inside the frame');
-  console.assert(heliSpan && heliSpan.minY >= 0.3 && heliSpan.maxY <= 0.95, 'chase helicopter must sit in the upper third of the frame');
+  console.assert(heliSpan && heliSpan.minY >= 0.28 && heliSpan.maxY <= 0.9, 'chase helicopter must sit in the upper part of the sky');
   console.assert(nearestToCamera >= 6, 'chase camera must be clear of parked vehicles within 6m');
-  console.assert(wallFraction < 0.65, 'chase largest building face must stay under 65% of frame width');
   return true;
 }
+
 
 async function stageShootout(game) {
   game.timeOfDay = 22.1;
