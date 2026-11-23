@@ -456,12 +456,14 @@ async function stageChase(game) {
     if (heli.spotlightCone) heli.spotlightCone.visible = false;
   }
 
+  // Wide, sun-soaked chase framing: three-quarter rear view down the Malecon.
   const cameraPos = heroPos.clone().addScaledVector(forward, -7.5).addScaledVector(left, 1.2).setY(2.2);
+  const chaseFov = 62;
   const lookAt = heroPos.clone().addScaledVector(forward, 14).setY(1.0);
   game.shotSpeed = 22;
   game.shotCamera = null;
   lockCamera(game, true, 22, {});
-  pinCamera(game, cameraPos, lookAt, 62);
+  pinCamera(game, cameraPos, lookAt, chaseFov);
   game.engine.camera.updateMatrixWorld(true);
 
   if (heli) {
