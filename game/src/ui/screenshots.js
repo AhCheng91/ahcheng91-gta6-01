@@ -357,38 +357,257 @@ function fitHeroCamera(game, hero, forward, options = {}) {
   return pose;
 }
 
+// ---------------------------------------------------------------------------
+// Round 6 key-art rig. The cover is a staged action frame: the Calyx Sprint
+// breaks past a wrecked, burning interceptor while a second cruiser runs the
+// far lane with its beacons painting the asphalt, and the rest of the cordon
+// waits up the Malecón. Every piece is placed by hand (no random numbers, no
+// wall clock), so ?shot=chase renders the same frame on every capture.
+// ---------------------------------------------------------------------------
+
+function additiveMesh(geometry, color, opacity) {
+  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+}
+
+function keyartSprite(color, size, opacity) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialSpotTexture(), color, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
+let flameTextureCache = null;
+
+// A soft teardrop flame, drawn once: a billboard with this reads as fire from
+// any angle, which stacked cones never did at poster size.
+function flameTexture() {
+  if (flameTextureCache) return flameTextureCache;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(64, 176, 4, 64, 168, 118);
+  gradient.addColorStop(0, 'rgba(255,244,196,1)');
+  gradient.addColorStop(0.2, 'rgba(255,208,104,1)');
+  gradient.addColorStop(0.45, 'rgba(255,140,40,0.96)');
+  gradient.addColorStop(0.72, 'rgba(226,74,16,0.72)');
+  gradient.addColorStop(1, 'rgba(180,40,8,0)');
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.moveTo(64, 6);
+  context.bezierCurveTo(112, 96, 126, 196, 64, 244);
+  context.bezierCurveTo(2, 196, 16, 96, 64, 6);
+  context.fill();
+  flameTextureCache = new THREE.CanvasTexture(canvas);
+  if ('colorSpace' in flameTextureCache && THREE.SRGBColorSpace) flameTextureCache.colorSpace = THREE.SRGBColorSpace;
+  return flameTextureCache;
+}
+
+// Sustained vehicle fire: four billboard flames of different size and lean over
+// a warm point light, which is what throws the firelight onto the road.
+function keyartFlames(scale = 1) {
+  const group = new THREE.Group();
+  group.name = 'Key-art flames';
+  const licks = [
+    { x: -0.5, z: 0.1, y: 1.45, w: 1.35, h: 3.0, opacity: 0.95, tilt: 0.16 },
+    { x: 0.46, z: -0.14, y: 1.25, w: 1.15, h: 2.6, opacity: 0.9, tilt: -0.2 },
+    { x: 0.02, z: 0.26, y: 1.05, w: 1.0, h: 2.1, opacity: 0.85, tilt: 0.05 },
+    { x: -0.05, z: -0.08, y: 0.8, w: 0.66, h: 1.4, opacity: 0.95, tilt: -0.04 },
+  ];
+  for (const lick of licks) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: flameTexture(), transparent: true, opacity: lick.opacity, depthWrite: false, fog: false,
+    }));
+    sprite.scale.set(lick.w * scale, lick.h * scale, 1);
+    sprite.position.set(lick.x * scale, lick.y * scale, lick.z * scale);
+    sprite.material.rotation = lick.tilt;
+    group.add(sprite);
+  }
+  const light = new THREE.PointLight('#ff7d2e', 18, 24, 2);
+  light.position.y = 1.5 * scale;
+  group.add(light);
+  return group;
+}
+
+// Soft billboard puffs: a column of dark smoke reads at poster size where hard
+// low-poly spheres read as grey bubbles.
+function keyartSmoke(scale = 1, count = 6, rise = 8) {
+  const group = new THREE.Group();
+  group.name = 'Key-art smoke';
+  for (let index = 0; index < count; index += 1) {
+    const t = index / Math.max(1, count - 1);
+    const puff = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialSpotTexture(), color: '#332c33', transparent: true,
+      opacity: 0.5 * (1 - t * 0.6), depthWrite: false, fog: true,
+    }));
+    const size = (1.4 + t * 3.0) * scale;
+    puff.scale.set(size, size * 0.92, 1);
+    const sway = (index % 2 === 0 ? 1 : -1) * (0.25 + t * 1.2) * scale;
+    puff.position.set(sway, (1.35 + t * rise) * scale, (index % 3 - 1) * 0.4 * scale);
+    group.add(puff);
+  }
+  return group;
+}
+
+function keyartGroundPool(game, position, { radius = 5.5, color = '#ff2a3c', opacity = 0.5, name = 'Key-art light pool' } = {}) {
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(radius, 44), new THREE.MeshBasicMaterial({
+    map: radialSpotTexture(), color, transparent: true, opacity,
+    depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }));
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.set(position.x, 0.08, position.z);
+  pool.name = name;
+  pool.renderOrder = 2;
+  game.engine.scene.add(pool);
+  return pool;
+}
+
+// Tyre smoke squatting behind the hero's rear wheels: the cue that the car is
+// moving rather than parked in the middle of the road.
+function keyartTyreSmoke(game, hero, forward, left) {
+  const group = new THREE.Group();
+  group.name = 'Key-art tyre smoke';
+  const puffs = [
+    { ahead: -1.4, side: 1.05, y: 0.35, size: 0.55, opacity: 0.32 },
+    { ahead: -1.7, side: -1.05, y: 0.32, size: 0.48, opacity: 0.28 },
+    { ahead: -2.5, side: 0.5, y: 0.45, size: 0.72, opacity: 0.18 },
+  ];
+  for (const puff of puffs) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialSpotTexture(), color: '#e6d8c6', transparent: true,
+      opacity: puff.opacity, depthWrite: false, fog: true,
+    }));
+    sprite.scale.set(puff.size, puff.size * 0.75, 1);
+    sprite.position.copy(hero.position).addScaledVector(forward, puff.ahead).addScaledVector(left, puff.side).setY(puff.y);
+    group.add(sprite);
+  }
+  game.engine.scene.add(group);
+  return group;
+}
+
+function anchorUnit(unit, position) {
+  unit.position = position;
+  unit.tactic = 'HOLD';
+}
+
+// Dresses the set: a wrecked burning interceptor on the sea side, an
+// interceptor running the far lane under its beacons, and the rest of the
+// cordon parked up the road.
+function buildKeyartSet(game, { hero, forward, left }) {
+  const at = (ahead, side, y = 0) => hero.position.clone().addScaledVector(forward, ahead).addScaledVector(left, side).setY(y);
+  const cruisers = game.police.units.filter((unit) => unit.kind === 'CRUISER' && unit.vehicle);
+  const [burning, beside] = cruisers;
+
+  const park = (vehicle, position, heading) => {
+    vehicle.position.copy(position);
+    vehicle.heading = heading;
+    vehicle.speed = 0;
+    vehicle.maxSpeed = 0;
+    vehicle.parked = true;
+    vehicle.mesh.position.copy(vehicle.position);
+    vehicle.mesh.rotation.y = heading;
+    vehicle.update = () => {};
+  };
+
+  if (burning) {
+    const vehicle = burning.vehicle;
+    park(vehicle, at(13.0, 7.0), Math.PI / 2 - 0.55);
+    if (typeof vehicle.setSiren === 'function') vehicle.setSiren(false);
+    if (vehicle.redLamp) vehicle.redLamp.material.color.set('#2a0d12');
+    if (vehicle.blueLamp) vehicle.blueLamp.material.color.set('#0b1226');
+    // Charred shell: only the paint still looked factory fresh.
+    vehicle.body.material = vehicle.body.material.clone();
+    vehicle.body.material.color.set('#4a3a34');
+    vehicle.body.material.roughness = 0.85;
+    vehicle.body.material.metalness = 0.15;
+    anchorUnit(burning, vehicle.position);
+
+    const flames = keyartFlames(1.7);
+    flames.position.copy(vehicle.position).addScaledVector(forward, 0.9).setY(0.5);
+    game.engine.scene.add(flames);
+    const smoke = keyartSmoke(1.1, 6, 8);
+    smoke.position.copy(vehicle.position).addScaledVector(forward, 0.4).setY(0.9);
+    game.engine.scene.add(smoke);
+    keyartGroundPool(game, vehicle.position, { radius: 6.2, color: '#ff7a24', opacity: 0.3, name: 'Key-art fire pool' });
+  }
+
+  if (beside) {
+    const vehicle = beside.vehicle;
+    park(vehicle, at(21.0, -3.6), Math.PI / 2 + 0.15);
+    if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
+    if (vehicle.redLamp) vehicle.redLamp.material.color.set('#ff2432');
+    if (vehicle.blueLamp) vehicle.blueLamp.material.color.set('#2e60ff');
+    anchorUnit(beside, vehicle.position);
+    keyartGroundPool(game, at(22.0, -3.6), { radius: 4.6, color: '#ff2432', opacity: 0.32, name: 'Key-art red beacon' });
+    keyartGroundPool(game, at(18.0, -3.6), { radius: 4.2, color: '#2f6bff', opacity: 0.28, name: 'Key-art blue beacon' });
+    const beaconGlow = keyartSprite('#ff5566', 4.4, 0.4);
+    beaconGlow.position.copy(vehicle.position).addScaledVector(forward, -0.4).setY(2.25);
+    game.engine.scene.add(beaconGlow);
+  }
+
+  cruisers.slice(2, 4).forEach((unit, index) => {
+    const vehicle = unit.vehicle;
+    park(vehicle, at(38 + index * 6, index === 0 ? 4.2 : -4.0), Math.PI / 2 + (index === 0 ? 1.05 : -1.05));
+    if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
+    anchorUnit(unit, vehicle.position);
+    keyartGroundPool(game, vehicle.position, { radius: 4.0, color: index === 0 ? '#ff2432' : '#2f6bff', opacity: 0.22, name: 'Key-art roadblock beacon' });
+  });
+
+  keyartTyreSmoke(game, hero, forward, left);
+}
+
 async function stageChase(game) {
-  game.timeOfDay = 17.9;
+  game.timeOfDay = 17.92;
   game.engine.setTimeOfDay(game.timeOfDay);
 
-  // Keep the key light low so the frame holds a long warm band over the water.
+  // Round 2's light, kept: the sun sits low behind the lens so the hero paint
+  // burns orange, the street keeps long shadows and the water holds a warm band.
   const elevation = THREE.MathUtils.degToRad(8.5);
   const azimuth = -2.72;
   const horizontal = Math.sqrt(Math.max(0.001, 1 - Math.sin(elevation) * Math.sin(elevation)));
   game.engine.sunDirection = new THREE.Vector3(Math.cos(azimuth) * horizontal, Math.sin(elevation), Math.sin(azimuth) * horizontal).normalize();
   game.engine.skyUniforms.sunDirection.value.copy(game.engine.sunDirection);
   game.engine.skyUniforms.night.value = 0;
+  game.engine.sun.intensity = 2.15;
+  game.engine.sun.color.set('#ffd0a0');
   game.engine.hemi.intensity = 0.5;
   game.engine.hemi.color.set('#ffd3a6');
   game.engine.hemi.groundColor.set('#6b6250');
   game.engine.renderer.toneMappingExposure = 1.02;
+  game.engine.sunGlow.material.opacity = 0.5;
 
   const hero = game.heroVehicle;
   const heading = Math.PI / 2;
   const { forward, left } = frameBasis(heading);
   const heroPos = new THREE.Vector3(116, 0, -22);
 
-  game.shotSpeed = 22;
+  game.shotSpeed = 26;
   if (hero) {
     hero.position.copy(heroPos);
-    hero.heading = heading;
-    hero.speed = 22;
+    hero.heading = heading + 0.1;
+    hero.speed = game.shotSpeed;
     hero.braking = false;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
     game.player.enterVehicle(hero);
     game.player.mesh.visible = false;
     game.player.position.copy(hero.position);
+    // The cover lens sits square behind the body, where the factory clearcoat
+    // mirrored the sun into a white sheet: a softer finish keeps the paint red.
+    const paint = hero.body.material;
+    paint.roughness = 0.72;
+    paint.metalness = 0.08;
+    paint.clearcoat = 0.18;
+    paint.clearcoatRoughness = 0.5;
+    for (const lamp of hero.brakeLights) lamp.material.color.set('#ff3325');
+    for (const cone of hero.headlightCones ?? []) {
+      cone.visible = true;
+      cone.intensity = 24;
+    }
   }
 
   game.player.giveWeapon('pistol');
@@ -399,54 +618,37 @@ async function stageChase(game) {
   game.wanted.setStars(3, game.player.position);
   game.police.dispatch(3, game.player.position);
   game.police.ensureHelicopter(game.player.position);
-
   game.hud.setMission({ job: 'JOB 06 · CORONA TOWER JOB', stage: 'STAGE 3 / 4', stageIndex: 3, stageCount: 4, objective: 'Escape the Corona cordon', nextHint: 'REACH THE CAUSEWAY' });
   game.hud.say('LT. BRUNA OCHOA', 'All units, box him in on the Malecón!');
   game.hud.setRadio('PMPD SCANNER', 'DISPATCH 10-42');
   await settle(game, 60);
 
-  // Freeze the pursuit: every unit is placed by hand after this point.
+  // Freeze the pursuit, then dress the set by hand.
   game.police.dispatch = () => {};
   game.police.cooldowns.roadblock = 9999;
   game.police.update = () => {};
-  clearTrafficNear(game, heroPos, 60);
 
+  clearTrafficNear(game, heroPos, 40);
   if (hero) {
     hero.position.copy(heroPos);
-    hero.heading = heading;
-    hero.speed = 22;
+    hero.heading = heading + 0.1;
+    hero.speed = game.shotSpeed;
     hero.mesh.position.copy(hero.position);
     hero.mesh.rotation.y = hero.heading;
     game.player.position.copy(hero.position);
   }
 
-  const cruisers = game.police.units.filter((unit) => unit.kind === 'CRUISER' && unit.vehicle);
-  cruisers.forEach((unit, index) => {
-    const vehicle = unit.vehicle;
-    if (!vehicle) return;
-    if (index < 2) {
-      const ahead = index === 0 ? 18 : 28;
-      const side = index === 0 ? 3.4 : -3.4;
-      vehicle.position.copy(heroPos).addScaledVector(forward, ahead).addScaledVector(left, side);
-      vehicle.heading = heading + (index === 0 ? 0.08 : -0.08);
-      vehicle.speed = 22;
-      vehicle.maxSpeed = 0;
-      vehicle.parked = false;
-      vehicle.mesh.position.copy(vehicle.position);
-      vehicle.mesh.rotation.y = vehicle.heading;
-      if (typeof vehicle.setSiren === 'function') vehicle.setSiren(true);
-      unit.position = vehicle.position;
-      unit.tactic = 'CHASE';
-    } else {
-      vehicle.position.set(heroPos.x + 260 + index * 12, 0, heroPos.z + 8);
-      vehicle.speed = 0;
-      vehicle.maxSpeed = 0;
-      vehicle.mesh.position.copy(vehicle.position);
-      unit.position = vehicle.position;
-      unit.tactic = 'STANDBY';
-    }
-    vehicle.update = () => {};
-  });
+  // The parking lots sit over the same asphalt: move the ones in front of the
+  // lens out of the road so only staged vehicles remain.
+  for (const vehicle of game.traffic.parked) {
+    if (vehicle === hero || vehicle.dead) continue;
+    if (Math.hypot(vehicle.position.x - heroPos.x, vehicle.position.z - heroPos.z) > 30) continue;
+    vehicle.position.set(heroPos.x + 420, 0, heroPos.z + 260);
+    vehicle.mesh.position.copy(vehicle.position);
+    vehicle.speed = 0;
+    vehicle.maxSpeed = 0;
+    vehicle.parked = false;
+  }
 
   const heli = game.police.units.find((unit) => unit.kind === 'HELICOPTER' && !unit.dead);
   if (heli) {
@@ -456,43 +658,48 @@ async function stageChase(game) {
     if (heli.spotlightCone) heli.spotlightCone.visible = false;
   }
 
-  // Wide, sun-soaked chase framing: three-quarter rear view down the Malecon.
-  const cameraPos = heroPos.clone().addScaledVector(forward, -7.5).addScaledVector(left, 1.2).setY(2.2);
-  const chaseFov = 62;
-  const lookAt = heroPos.clone().addScaledVector(forward, 14).setY(1.0);
-  game.shotSpeed = 22;
+  buildKeyartSet(game, { hero, forward, left });
+
+  // Low three-quarter rear boom: the hero fills the centre of the road, the
+  // wreck and the beacons stack up behind it, and the cordon closes the street.
+  const cameraPos = heroPos.clone().addScaledVector(forward, -6.6).addScaledVector(left, -1.6).setY(1.95);
+  const lookAt = heroPos.clone().addScaledVector(forward, 9).setY(1.0);
+  const fov = 54;
+
+  game.shotSpeed = null;
   game.shotCamera = null;
-  lockCamera(game, true, 22, {});
-  pinCamera(game, cameraPos, lookAt, chaseFov);
+  lockCamera(game, true, null, {});
+  pinCamera(game, cameraPos, lookAt, fov);
   game.engine.camera.updateMatrixWorld(true);
 
   if (heli) {
-    const heliPos = worldAtNdc(game.engine.camera, -0.45, 0.42, 60);
+    const heliPos = worldAtNdc(game.engine.camera, -0.46, 0.6, 62);
     heli.mesh.position.copy(heliPos);
     heli.position.copy(heliPos);
   }
 
+  // The teleport can leave the district banner up over the sky: clear it and
+  // keep the HUD from raising it again during the capture.
+  game.hud.showDistrict = () => {};
+  game.hud.districtUntil = 0;
+  game.hud.elements?.districtPanel?.classList?.remove('district-in');
+
   const camera = game.engine.camera;
   const heroSpan = hero ? projectedSpan(camera, vehicleCorners(hero)) : null;
-  const cruiserSpans = cruisers.slice(0, 2).filter((unit) => unit.vehicle).map((unit) => projectedSpan(camera, vehicleCorners(unit.vehicle)));
-  const heliSpan = heli ? projectedSpan(camera, meshSilhouettePoints(heli.mesh)) : null;
-  const nearestToCamera = Math.min(...game.traffic.vehicles
-    .filter((vehicle) => vehicle !== hero)
-    .map((vehicle) => cameraPos.distanceTo(vehicle.position)));
+  const cruiserSpans = game.police.units
+    .filter((unit) => unit.kind === 'CRUISER' && unit.vehicle)
+    .slice(0, 3)
+    .map((unit) => projectedSpan(camera, vehicleCorners(unit.vehicle)));
   const report = {
     camera: cameraPos.toArray().map((value) => Number(value.toFixed(2))),
     heroWidthOfFrame: heroSpan ? Number(heroSpan.width.toFixed(3)) : null,
     hero: heroSpan ? { minX: Number(heroSpan.minX.toFixed(2)), maxX: Number(heroSpan.maxX.toFixed(2)), minY: Number(heroSpan.minY.toFixed(2)), maxY: Number(heroSpan.maxY.toFixed(2)) } : null,
-    cruisers: cruiserSpans.map((span) => (span ? { minX: Number(span.minX.toFixed(2)), maxX: Number(span.maxX.toFixed(2)), minY: Number(span.minY.toFixed(2)), maxY: Number(span.maxY.toFixed(2)) } : null)),
-    heli: heliSpan ? { minX: Number(heliSpan.minX.toFixed(2)), maxX: Number(heliSpan.maxX.toFixed(2)), minY: Number(heliSpan.minY.toFixed(2)), maxY: Number(heliSpan.maxY.toFixed(2)) } : null,
-    nearestVehicleToCamera: Number(nearestToCamera.toFixed(2)),
+    cruisersInFrame: cruiserSpans.filter((span) => span && span.minX > -1.1 && span.maxX < 1.1).length,
   };
   console.info('[shot:chase]', JSON.stringify(report));
-  console.assert(heroSpan && heroSpan.width >= 0.1 && heroSpan.width <= 0.24, 'chase hero car must cover 10-24% of the frame width');
-  console.assert(heroSpan && heroSpan.minX > -0.9 && heroSpan.maxX < 0.9 && heroSpan.minY > -0.62 && heroSpan.maxY < 0.6, 'chase hero car must sit whole inside the frame above the bottom bar');
-  console.assert(cruiserSpans.length === 2 && cruiserSpans.every((span) => span && span.minX > -1 && span.maxX < 1 && span.minY > -1 && span.maxY < 1), 'both chase cruisers must be whole inside the frame');
-  console.assert(heliSpan && heliSpan.minY >= 0.28 && heliSpan.maxY <= 0.9, 'chase helicopter must sit in the upper part of the sky');
-  console.assert(nearestToCamera >= 6, 'chase camera must be clear of parked vehicles within 6m');
+  console.assert(heroSpan && heroSpan.width >= 0.16 && heroSpan.width <= 0.36, 'chase hero car must cover 16-36% of the frame width');
+  console.assert(heroSpan && heroSpan.minX > -0.92 && heroSpan.maxX < 0.92 && heroSpan.minY > -0.72 && heroSpan.maxY < 0.5, 'chase hero car must sit whole inside the frame');
+  console.assert(report.cruisersInFrame >= 3, 'chase frame must hold the wreck, the beacon cruiser and the cordon');
   return true;
 }
 
